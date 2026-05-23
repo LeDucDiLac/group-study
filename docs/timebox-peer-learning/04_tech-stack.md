@@ -220,13 +220,21 @@ CREATE POLICY "Users can insert own submission within window" ON submissions
   avatarUrl: String,
   bio: String,
   role: "learner" | "admin",
-  rank: {
-    level: Number,          // 1-10
-    name: String,
-    points: Number,
-  },
+  rank: Number,             // tong diem rank
   createdAt: Date,
   updatedAt: Date,
+}
+```
+
+#### ranks
+
+```
+{
+  _id: ObjectId,
+  level: Number,            // 1-10
+  name: String,             // ten rank doc tu nghiep vu (01_nghiep-vu.md)
+  minPoints: Number,        // moi rank = 100 diem
+  createdAt: Date,
 }
 ```
 
