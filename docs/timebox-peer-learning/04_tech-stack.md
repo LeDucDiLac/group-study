@@ -203,6 +203,112 @@ CREATE POLICY "Users can insert own submission within window" ON submissions
 
 ---
 
+## MongoDB Data Model (Option C)
+
+> Dung cho backend Node.js + MongoDB. Uu tien nhung du lieu lien quan vao document de giam so collection.
+
+### Collections (rut gon)
+
+#### users
+
+```
+{
+  _id: ObjectId,
+  email: String,
+  passwordHash: String,
+  displayName: String,
+  avatarUrl: String,
+  bio: String,
+  role: "learner" | "admin",
+  rank: {
+    level: Number,          // 1-10
+    name: String,
+    points: Number,
+  },
+  createdAt: Date,
+  updatedAt: Date,
+}
+```
+
+#### topics
+
+```
+{
+  _id: ObjectId,
+  title: String,
+  description: String,
+  category: String,
+  tags: [String],
+  status: "Chưa duyệt", "Bị từ chối", "Đang mở", "Đã hoàn thành",
+  windowHours: Number,      // thoi luong nop bai tinh tu luc bat dau hoc
+  createdBy: ObjectId,       // users._id
+  resources: [
+    {
+      type: "link" | "file",
+      label: String,
+      url: String,
+    }
+  ],
+  submissions: [
+    {
+      _id: ObjectId,
+      userId: ObjectId,
+      understood: String,
+      notUnderstood: String,
+      isAnonymous: Boolean,
+      status: "Chưa duyệt", "Đã duyệt",
+      reactions: {
+        like: [ObjectId],
+        dislike: [ObjectId],
+      },
+      resources: [
+        {
+          type: "link" | "file",
+          label: String,
+          url: String,
+        }
+      ],
+      comments: [
+        {
+          _id: ObjectId,
+          userId: ObjectId,
+          content: String,
+          reactions: {
+            like: [ObjectId],
+            dislike: [ObjectId],
+          },
+          comments: [
+            _id: ObjectId,
+            userId: ObjectId,
+            content: String,
+            reactions: {
+              like: [ObjectId],
+              dislike: [ObjectId],
+            },
+            createdAt: Date,
+          ],
+          createdAt: Date,
+        }
+      ],
+      createdAt: Date,
+      updatedAt: Date,
+    }
+  ],
+  createdAt: Date,
+  updatedAt: Date,
+}
+```
+
+---
+
+### Ghi chu
+
+- Chi muc goi y: topics.status, topics.category.
+- Gate xem bai nop: chi tra ve bai nop khi user da nop, hoac topic da completed.
+- An danh: neu isAnonymous = true, API khong tra ve userId va thong tin user.
+
+---
+
 ## Environment Variables (.env.local)
 
 ```env

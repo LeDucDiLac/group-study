@@ -160,7 +160,6 @@
     | Thời gian làm bài (window) | Number | ✅ | Mặc định 2 ngày (48h), min 1 ngày, max 7 ngày |
     | Yêu cầu kiến thức trước | Textarea | ❌ | Prerequisites |
     | Tài liệu / link tham khảo | URL list | ❌ | Tối đa 5 links |
-    | Lý do đề xuất chủ đề này | Textarea | ✅ | Giúp Admin duyệt nhanh hơn |
 - **Quy tắc nghiệp vụ**:
     - Chủ đề do người học tạo phải **chờ Admin phê duyệt** trước khi hiển thị cho cộng đồng
     - Window do người tạo chủ đề đề xuất, Admin có thể chỉnh sửa khi duyệt
