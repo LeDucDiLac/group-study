@@ -4,11 +4,12 @@ import {
   getSubmission,
   listSubmissions,
 } from '../controllers/submissionsController.js'
+import { authMiddleware } from '../middleware/authMiddleware.js'
 
 const router = Router()
 
 router.get('/', listSubmissions)
-router.post('/', createSubmission)
+router.post('/', authMiddleware, createSubmission)
 router.get('/:id', getSubmission)
 
 export default router

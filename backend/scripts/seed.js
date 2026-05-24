@@ -151,6 +151,10 @@ async function run() {
       resources: [
         { type: 'link', label: 'Video giới thiệu', url: 'https://example.com/video' },
       ],
+      Participation: [
+        { userId: users[1]._id, startedAt: now },
+        { userId: users[2]._id, startedAt: now },
+      ],
       submissions: [],
       createdAt: now,
       updatedAt: now,
@@ -171,6 +175,7 @@ async function run() {
       resources: [
         { type: 'link', label: 'Bài viết tham khảo', url: 'https://example.com/article' },
       ],
+      Participation: [],
       submissions: [],
       createdAt: now,
       updatedAt: now,
@@ -189,6 +194,7 @@ async function run() {
       approvedBy: users[0]._id,
       approvedAt: now,
       resources: [],
+      Participation: [{ userId: users[4]._id, startedAt: now }],
       submissions: [],
       createdAt: now,
       updatedAt: now,

@@ -257,6 +257,12 @@ CREATE POLICY "Users can insert own submission within window" ON submissions
       url: String,
     }
   ],
+  Participation: [
+    {
+      userId: ObjectId,
+      startedAt: Date,
+    }
+  ]
   submissions: [
     {
       _id: ObjectId,
