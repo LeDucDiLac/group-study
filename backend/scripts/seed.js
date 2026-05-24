@@ -59,16 +59,16 @@ async function run() {
   }
 
   const ranks = [
-    { _id: new mongoose.Types.ObjectId(), level: 1, name: 'Tập sự', minPoints: 0, createdAt: now },
-    { _id: new mongoose.Types.ObjectId(), level: 2, name: 'Tân binh', minPoints: 100, createdAt: now },
-    { _id: new mongoose.Types.ObjectId(), level: 3, name: 'Sinh viên chính thức', minPoints: 200, createdAt: now },
-    { _id: new mongoose.Types.ObjectId(), level: 4, name: 'Sinh viên kỳ cựu', minPoints: 300, createdAt: now },
-    { _id: new mongoose.Types.ObjectId(), level: 5, name: 'Tinh anh', minPoints: 400, createdAt: now },
-    { _id: new mongoose.Types.ObjectId(), level: 6, name: 'Học giả', minPoints: 500, createdAt: now },
-    { _id: new mongoose.Types.ObjectId(), level: 7, name: 'Đại học giả', minPoints: 600, createdAt: now },
-    { _id: new mongoose.Types.ObjectId(), level: 8, name: 'Lão sư', minPoints: 700, createdAt: now },
-    { _id: new mongoose.Types.ObjectId(), level: 9, name: 'Đại lão sư', minPoints: 800, createdAt: now },
-    { _id: new mongoose.Types.ObjectId(), level: 10, name: 'Thách đấu', minPoints: 900, createdAt: now },
+    { _id: new mongoose.Types.ObjectId(), level: 1, name: 'Tập sự', createdAt: now },
+    { _id: new mongoose.Types.ObjectId(), level: 2, name: 'Tân binh', createdAt: now },
+    { _id: new mongoose.Types.ObjectId(), level: 3, name: 'Sinh viên chính thức', createdAt: now },
+    { _id: new mongoose.Types.ObjectId(), level: 4, name: 'Sinh viên kỳ cựu', createdAt: now },
+    { _id: new mongoose.Types.ObjectId(), level: 5, name: 'Tinh anh', createdAt: now },
+    { _id: new mongoose.Types.ObjectId(), level: 6, name: 'Học giả', createdAt: now },
+    { _id: new mongoose.Types.ObjectId(), level: 7, name: 'Đại học giả', createdAt: now },
+    { _id: new mongoose.Types.ObjectId(), level: 8, name: 'Lão sư', createdAt: now },
+    { _id: new mongoose.Types.ObjectId(), level: 9, name: 'Đại lão sư', createdAt: now },
+    { _id: new mongoose.Types.ObjectId(), level: 10, name: 'Thách đấu', createdAt: now },
   ]
 
   const users = [

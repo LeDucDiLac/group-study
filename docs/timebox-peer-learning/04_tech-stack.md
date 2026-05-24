@@ -233,7 +233,6 @@ CREATE POLICY "Users can insert own submission within window" ON submissions
   _id: ObjectId,
   level: Number,            // 1-10
   name: String,             // ten rank doc tu nghiep vu (01_nghiep-vu.md)
-  minPoints: Number,        // moi rank = 100 diem
   createdAt: Date,
 }
 ```
