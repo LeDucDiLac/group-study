@@ -26,7 +26,7 @@ const commentSchema = new Schema(
       type: reactionSchema,
       default: () => ({ like: [], dislike: [] }),
     },
-    comments: [],
+    subcomments: [],
     createdAt: {
       type: Date,
       default: Date.now,
@@ -35,7 +35,7 @@ const commentSchema = new Schema(
   { _id: true }
 )
 
-commentSchema.add({ comments: [commentSchema] })
+commentSchema.add({ subcomments: [commentSchema] })
 
 const topicResourceSchema = new Schema(
   {
@@ -99,6 +99,7 @@ const submissionSchema = new Schema(
     },
     status: {
       type: String,
+      enum: ['Chưa duyệt', 'Đã duyệt'],
       default: 'Chưa duyệt',
       trim: true,
     },
@@ -151,16 +152,18 @@ const topicSchema = new Schema(
       trim: true,
     },
     tags: [{ type: String, trim: true }],
-    status: {
-      type: String,
-      trim: true,
-    },
     windowHours: {
       type: Number,
     },
     createdBy: {
       type: Schema.Types.ObjectId,
       ref: 'User',
+    },
+    status: {
+      type: String,
+      enum: ['Chưa duyệt', 'Bị từ chối', 'Đang mở', 'Đã hoàn thành'],
+      default: 'Chưa duyệt',
+      trim: true,
     },
     resources: [topicResourceSchema],
     Participation: [participationSchema],
@@ -170,6 +173,73 @@ const topicSchema = new Schema(
     timestamps: true,
   }
 )
+
+// Do not create the model until statics are attached
+
+// Static helper: find topic/submission/comment by a comment id (top-level or nested)
+// Returns { topicId, submissionId, commentId, subCommentId? } or null
+topicSchema.statics.findTargetByCommentId = async function findTargetByCommentId(commentId) {
+  if (!commentId) return null
+
+  const normalizedId = new mongoose.Types.ObjectId(commentId)
+
+  const subCommentMatch = await this.aggregate([
+    { $unwind: '$submissions' },
+    { $unwind: '$submissions.comments' },
+    { $unwind: '$submissions.comments.subcomments' },
+    { $match: { 'submissions.comments.subcomments._id': normalizedId } },
+    {
+      $project: {
+        topicId: '$_id',
+        submissionId: '$submissions._id',
+        commentId: '$submissions.comments._id',
+        subCommentId: '$submissions.comments.subcomments._id',
+      },
+    },
+  ])
+
+  if (subCommentMatch.length > 0) {
+    return subCommentMatch[0]
+  }
+
+  const subCommentAliasMatch = await this.aggregate([
+    { $unwind: '$submissions' },
+    { $unwind: '$submissions.comments' },
+    { $unwind: '$submissions.comments.subComments' },
+    { $match: { 'submissions.comments.subComments._id': normalizedId } },
+    {
+      $project: {
+        topicId: '$_id',
+        submissionId: '$submissions._id',
+        commentId: '$submissions.comments._id',
+        subCommentId: '$submissions.comments.subComments._id',
+      },
+    },
+  ])
+
+  if (subCommentAliasMatch.length > 0) {
+    return subCommentAliasMatch[0]
+  }
+
+  const commentMatch = await this.aggregate([
+    { $unwind: '$submissions' },
+    { $unwind: '$submissions.comments' },
+    { $match: { 'submissions.comments._id': normalizedId } },
+    {
+      $project: {
+        topicId: '$_id',
+        submissionId: '$submissions._id',
+        commentId: '$submissions.comments._id',
+      },
+    },
+  ])
+
+  if (commentMatch.length > 0) {
+    return commentMatch[0]
+  }
+
+  return null
+}
 
 const Topic = mongoose.models.Topic || mongoose.model('Topic', topicSchema)
 

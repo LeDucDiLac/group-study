@@ -237,6 +237,27 @@ CREATE POLICY "Users can insert own submission within window" ON submissions
 }
 ```
 
+#### notifications
+
+```
+{
+  _id: ObjectId,
+  userId: ObjectId,          // users._id
+  actorId: ObjectId,
+  type: "comment" | "system",
+  title: String,
+  content: String,
+  target: {
+    topicId: ObjectId,
+    submissionId: ObjectId,
+    commentId: ObjectId,
+    subCommentId: ObjectId,
+  },
+  isRead: Boolean,
+  createdAt: Date,
+}
+```
+
 #### topics
 
 ```
@@ -290,7 +311,7 @@ CREATE POLICY "Users can insert own submission within window" ON submissions
             like: [ObjectId],
             dislike: [ObjectId],
           },
-          comments: [
+          subcomments: [
             _id: ObjectId,
             userId: ObjectId,
             content: String,

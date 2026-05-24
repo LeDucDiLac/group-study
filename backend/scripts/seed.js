@@ -17,18 +17,19 @@ async function run() {
   const usersCollection = db.collection('users')
   const ranksCollection = db.collection('ranks')
   const topicsCollection = db.collection('topics')
+  const notificationsCollection = db.collection('notifications')
 
   await usersCollection.deleteMany({})
   await ranksCollection.deleteMany({})
   await topicsCollection.deleteMany({})
+  await notificationsCollection.deleteMany({})
 
   const now = new Date()
 
-  function createComment({ userId, content, parentId = null }) {
-    return {
+  function createComment({ userId, content, subComments }) {
+    const comment = {
       _id: new mongoose.Types.ObjectId(),
       userId,
-      parentId,
       content,
       reactions: {
         like: [],
@@ -36,6 +37,12 @@ async function run() {
       },
       createdAt: now,
     }
+
+    if (Array.isArray(subComments)) {
+      comment.subComments = subComments
+    }
+
+    return comment
   }
 
   function createSubmission({ userId, understood, notUnderstood, isAnonymous = false }) {
@@ -207,7 +214,16 @@ async function run() {
     notUnderstood: 'Khó giữ thứ tự khi danh sách dài.',
   })
   submission1.comments.push(
-    createComment({ userId: users[2]._id, content: 'Bố cục ổn, thử liên kết các mục lại.' })
+    createComment({
+      userId: users[2]._id,
+      content: 'Bố cục ổn, thử liên kết các mục lại.',
+      subComments: [
+        createComment({
+          userId: users[1]._id,
+          content: 'Cảm ơn bạn, mình sẽ thử nối các ý theo dòng câu chuyện.',
+        }),
+      ],
+    })
   )
 
   const submission2 = createSubmission({
@@ -219,13 +235,18 @@ async function run() {
   const rootComment = createComment({
     userId: users[3]._id,
     content: 'Ôn tập hàng tuần giúp rất nhiều.',
+    subComments: [
+      createComment({
+        userId: users[1]._id,
+        content: 'Đồng ý, mình làm vào mỗi Chủ nhật.',
+      }),
+      createComment({
+        userId: users[2]._id,
+        content: 'Mình thường ghi lại checklist để ôn theo tuần.',
+      }),
+    ],
   })
-  const replyComment = createComment({
-    userId: users[1]._id,
-    content: 'Đồng ý, mình làm vào mỗi Chủ nhật.',
-    parentId: rootComment._id,
-  })
-  submission2.comments.push(rootComment, replyComment)
+  submission2.comments.push(rootComment)
 
   topics[0].submissions.push(submission1, submission2)
 
@@ -235,14 +256,58 @@ async function run() {
     notUnderstood: 'Chưa tối ưu thời gian nghỉ.',
   })
   submission3.comments.push(
-    createComment({ userId: users[2]._id, content: 'Thử nghỉ 5 phút trước nhé.' })
+    createComment({
+      userId: users[2]._id,
+      content: 'Thử nghỉ 5 phút trước nhé.',
+      subComments: [
+        createComment({
+          userId: users[4]._id,
+          content: 'Ok, mình sẽ thử điều chỉnh nhịp nghỉ.',
+        }),
+      ],
+    })
   )
 
   topics[2].submissions.push(submission3)
 
+  const commentNotificationText = `Người học 2 đã bình luận: "${submission1.comments[0].subComments[0].content}" trên bài nộp của bạn.`
+  const systemNotificationText = `Chủ đề mới: ${topics[2].title} — ${topics[2].description}`
+
+  const notifications = [
+    {
+      _id: new mongoose.Types.ObjectId(),
+      userId: users[1]._id,
+      actorId: users[2]._id,
+      type: 'comment',
+      title: commentNotificationText,
+      content: commentNotificationText,
+      target: {
+        topicId: topics[0]._id,
+        submissionId: submission1._id,
+        commentId: submission1.comments[0]._id
+      },
+      isRead: false,
+      createdAt: now,
+    },
+    {
+      _id: new mongoose.Types.ObjectId(),
+      userId: users[2]._id,
+      actorId: users[3]._id,
+      type: 'system',
+      title: systemNotificationText,
+      content: systemNotificationText,
+      target: {
+        topicId: topics[2]._id,
+      },
+      isRead: false,
+      createdAt: now,
+    },
+  ]
+
   await ranksCollection.insertMany(ranks)
   await usersCollection.insertMany(users)
   await topicsCollection.insertMany(topics)
+  await notificationsCollection.insertMany(notifications)
 
   console.log('Seed completed:', {
     users: users.length,
