@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "node src/server.js",
     "start": "node src/server.js",
-    "seed": "node scripts/seed.js"
+    "seed": "node scripts/seed.js",
+    "test:rank": "node scripts/test-rank-service.js",
+    "test:notification": "node scripts/test-notification-service.js",
+    "test:system-notification": "node scripts/test-system-notification-service.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

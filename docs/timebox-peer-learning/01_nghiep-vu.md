@@ -226,7 +226,6 @@
 - **Bình luận của bạn được người khác like**: +5 điểm.
 - **Bài nộp của bạn được phê duyệt**: +20 điểm.
 - **Bài nộp của bạn được người khác like**: +10 điểm.
-- **Bài nộp của bạn bị người khác dislike**: 0 điểm (không trừ).
 - Với người dùng từ **rank 5 trở lên**: chỉ tương tác từ **người dùng rank 5+** mới được tính điểm.
 - Với **chủ đề do bản thân đăng**:
     - Được phê duyệt: +50 điểm.
