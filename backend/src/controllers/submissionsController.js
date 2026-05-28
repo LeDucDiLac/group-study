@@ -1,10 +1,8 @@
 import mongoose from 'mongoose'
 import Topic from '../models/Topic.js'
+import User from '../models/User.js'
+import { addPointsForSubmissionApproved } from '../services/rankService.js'
 import { placeholder } from '../utils/placeholder.js'
-
-export function listSubmissions(req, res) {
-  res.json(placeholder({ items: [] }))
-}
 
 function isValidResources(resources) {
   if (!Array.isArray(resources)) {
@@ -25,7 +23,6 @@ function isValidResources(resources) {
     return typeof url === 'string' && url.trim().length > 0
   })
 }
-
 
 function validateSubmissionWindow(topic, userId) {
   if (topic.windowHours == null) {
@@ -57,6 +54,96 @@ function validateSubmissionWindow(topic, userId) {
   }
 
   return { ok: true }
+}
+
+function countNestedComments(comments) {
+  if (!Array.isArray(comments)) {
+    return 0
+  }
+
+  let total = 0
+  for (const comment of comments) {
+    total += 1
+    const nested = Array.isArray(comment?.comments)
+      ? comment.comments
+      : Array.isArray(comment?.subComments)
+        ? comment.subComments
+        : Array.isArray(comment?.subcomments)
+          ? comment.subcomments
+          : []
+    total += countNestedComments(nested)
+  }
+
+  return total
+}
+
+function isSameDay(left, right) {
+  if (!left || !right) {
+    return false
+  }
+
+  const leftDate = new Date(left)
+  const rightDate = new Date(right)
+
+  return leftDate.toDateString() === rightDate.toDateString()
+}
+
+async function allowDailyPeek(userId, userRank, topicId) {
+  if (!canDailyPeek(userRank)) {
+    return { allowed: false }
+  }
+
+  if (!topicId) {
+    return { allowed: false }
+  }
+
+  const user = await User.findById(userId)
+    .select('submissionPeekedAt submissionPeekedTopicId')
+    .lean()
+  if (!user) {
+    return { allowed: false }
+  }
+
+  const now = new Date()
+  const normalizedTopicId = topicId.toString()
+
+  if (user.submissionPeekedAt && isSameDay(user.submissionPeekedAt, now)) {
+    if (user.submissionPeekedTopicId?.toString() === normalizedTopicId) {
+      return { allowed: true }
+    }
+
+    return { allowed: false }
+  }
+
+  await User.updateOne(
+    { _id: userId },
+    {
+      $set: {
+        submissionPeekedAt: now,
+        submissionPeekedTopicId: topicId,
+      },
+    }
+  )
+
+  return { allowed: true }
+}
+
+function canPeekAnytime(userRank) {
+  return typeof userRank === 'number' && userRank >= 600
+}
+
+function canDailyPeek(userRank) {
+  return typeof userRank === 'number' && userRank >= 300 && userRank <= 500
+}
+
+function normalizeSubmission(submission) {
+  if (!submission) {
+    return null
+  }
+
+  const commentCount = countNestedComments(submission.comments)
+  const { comments, ...rest } = submission
+  return { ...rest, commentCount }
 }
 
 function shouldAutoApproveSubmission(user) {
@@ -155,12 +242,149 @@ export async function createSubmission(req, res, next) {
 
     const [createdSubmission] = updatedTopic.submissions || []
 
+    if (shouldAutoApprove) {
+      await addPointsForSubmissionApproved({ submissionOwnerId: userObjectId })
+    }
+
     return res.status(201).json(createdSubmission || submission)
   } catch (error) {
     return next(error)
   }
 }
 
-export function getSubmission(req, res) {
-  res.json(placeholder({ id: req.params.id }))
+export async function listTopicSubmissions(req, res, next) {
+  const { topicId } = req.params
+  const userId = req.user?.id || req.user?._id
+
+  if (!userId) {
+    return res.status(401).json({ error: 'Bạn cần đăng nhập để xem bài nộp.' })
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(topicId)) {
+    return res.status(400).json({ error: 'Liên kết chủ đề không hợp lệ.' })
+  }
+
+  try {
+    const topic = await Topic.findById(topicId)
+      .select('title status submissions')
+      .lean()
+
+    if (!topic) {
+      return res.status(404).json({ error: 'Không tìm thấy chủ đề.' })
+    }
+
+    const userObjectId = new mongoose.Types.ObjectId(userId)
+    const hasSubmitted = Array.isArray(topic.submissions)
+      ? topic.submissions.some((submission) =>
+          submission.userId && submission.userId.toString() === userId
+        )
+      : false
+
+    if (!hasSubmitted) {
+      const user = await User.findById(userObjectId).select('rank').lean()
+      if (!user) {
+        return res.status(404).json({ error: 'Không tìm thấy người dùng.' })
+      }
+
+      if (!canPeekAnytime(user.rank)) {
+        return res.status(403).json({ error: 'Bạn cần hoàn thành bài nộp để xem các bài nộp khác.', dailyPeekAllowed: canDailyPeek(user.rank) })
+      }
+    }
+
+    const items = Array.isArray(topic.submissions)
+      ? topic.submissions.map(normalizeSubmission)
+      : []
+
+    return res.json({
+      topicId: topic._id?.toString(),
+      topicTitle: topic.title,
+      items,
+    })
+  } catch (error) {
+    return next(error)
+  }
+}
+
+export async function listMySubmissions(req, res, next) {
+  const userId = req.user?.id || req.user?._id
+
+  if (!userId) {
+    return res.status(401).json({ error: 'Bạn cần đăng nhập để xem bài nộp.' })
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(userId)) {
+    return res.status(400).json({ error: 'Thông tin người dùng không hợp lệ.' })
+  }
+
+  try {
+    const userObjectId = new mongoose.Types.ObjectId(userId)
+    const results = await Topic.aggregate([
+      { $match: { 'submissions.userId': userObjectId } },
+      { $unwind: '$submissions' },
+      { $match: { 'submissions.userId': userObjectId } },
+      {
+        $project: {
+          topicId: '$_id',
+          topicTitle: '$title',
+          submission: '$submissions',
+        },
+      },
+      { $sort: { 'submission.createdAt': -1 } },
+    ])
+
+    const items = results.map((result) => ({
+      topicId: result.topicId?.toString(),
+      topicTitle: result.topicTitle,
+      submission: normalizeSubmission(result.submission),
+    }))
+
+    return res.json({ items })
+  } catch (error) {
+    return next(error)
+  }
+}
+
+export async function peekSubmissions(req, res, next) {
+  const { topicId } = req.params
+  const userId = Sring(req.user._id)
+
+  if (!userId) {
+    return res.status(401).json({ error: 'Bạn cần đăng nhập để xem bài nộp.' })
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(topicId)) {
+    return res.status(400).json({ error: 'Liên kết chủ đề không hợp lệ.' })
+  }
+
+  try {
+    const topic = await Topic.findById(topicId)
+      .select('title status submissions')
+      .lean()
+    if (!topic) {
+      return res.status(404).json({ error: 'Không tìm thấy chủ đề.' })
+    }
+
+    const user = await User.findById(userId).select('rank').lean()
+    if (!user) {
+      return res.status(404).json({ error: 'Không tìm thấy người dùng.' })
+    }
+    
+    const peekPermission = await allowDailyPeek(userId, user.rank, topicId)
+    if (!peekPermission.allowed) {
+      return res.status(403).json({ error: 'Bạn đã sử dụng quyền xem lén hôm nay. Vui lòng hoàn thành bài nộp để có thể xem các bài nộp khác.' })
+    }
+
+    const items = Array.isArray(topic.submissions)
+      ? topic.submissions.map(normalizeSubmission)
+      : []
+      
+    return res.json({
+      topicId: topic._id?.toString(),
+      topicTitle: topic.title,
+      items,
+    })
+  }
+    catch (error) {
+    return next(error)
+  }
 }

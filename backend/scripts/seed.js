@@ -18,11 +18,13 @@ async function run() {
   const ranksCollection = db.collection('ranks')
   const topicsCollection = db.collection('topics')
   const notificationsCollection = db.collection('notifications')
+  const bookmarksCollection = db.collection('bookmarks')
 
   await usersCollection.deleteMany({})
   await ranksCollection.deleteMany({})
   await topicsCollection.deleteMany({})
   await notificationsCollection.deleteMany({})
+  await bookmarksCollection.deleteMany({})
 
   const now = new Date()
 
@@ -84,7 +86,6 @@ async function run() {
       email: 'admin@timebox.local',
       passwordHash: 'placeholder',
       displayName: 'Quản trị',
-      avatarUrl: '',
       bio: '',
       role: 'admin',
       rank: 1000,
@@ -96,7 +97,6 @@ async function run() {
       email: 'user1@timebox.local',
       passwordHash: 'placeholder',
       displayName: 'Người học 1',
-      avatarUrl: '',
       bio: '',
       role: 'learner',
       rank: 10,
@@ -108,7 +108,6 @@ async function run() {
       email: 'user2@timebox.local',
       passwordHash: 'placeholder',
       displayName: 'Người học 2',
-      avatarUrl: '',
       bio: '',
       role: 'learner',
       rank: 120,
@@ -120,7 +119,6 @@ async function run() {
       email: 'user3@timebox.local',
       passwordHash: 'placeholder',
       displayName: 'Người học 3',
-      avatarUrl: '',
       bio: '',
       role: 'learner',
       rank: 220,
@@ -132,7 +130,6 @@ async function run() {
       email: 'user4@timebox.local',
       passwordHash: 'placeholder',
       displayName: 'Người học 4',
-      avatarUrl: '',
       bio: '',
       role: 'learner',
       rank: 330,
@@ -155,6 +152,10 @@ async function run() {
       createdBy: users[1]._id,
       approvedBy: users[0]._id,
       approvedAt: now,
+      reactions: {
+        like: [users[2]._id, users[3]._id],
+        dislike: [],
+      },
       resources: [
         { type: 'link', label: 'Video giới thiệu', url: 'https://example.com/video' },
       ],
@@ -179,6 +180,10 @@ async function run() {
       createdBy: users[2]._id,
       approvedBy: null,
       approvedAt: null,
+      reactions: {
+        like: [users[1]._id],
+        dislike: [],
+      },
       resources: [
         { type: 'link', label: 'Bài viết tham khảo', url: 'https://example.com/article' },
       ],
@@ -200,6 +205,10 @@ async function run() {
       createdBy: users[3]._id,
       approvedBy: users[0]._id,
       approvedAt: now,
+      reactions: {
+        like: [users[1]._id, users[2]._id, users[4]._id],
+        dislike: [],
+      },
       resources: [],
       Participation: [{ userId: users[4]._id, startedAt: now }],
       submissions: [],
@@ -304,14 +313,56 @@ async function run() {
     },
   ]
 
+  const bookmarks = [
+    {
+      _id: new mongoose.Types.ObjectId(),
+      userId: users[1]._id,
+      target: {
+        topicId: topics[0]._id,
+      },
+      type: 'topic',
+      note: 'Chủ đề cần ôn lại',
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      _id: new mongoose.Types.ObjectId(),
+      userId: users[2]._id,
+      target: {
+        topicId: topics[0]._id,
+        submissionId: submission1._id,
+      },
+      type: 'submission',
+      note: 'Bài nộp này có ví dụ tốt',
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      _id: new mongoose.Types.ObjectId(),
+      userId: users[3]._id,
+      target: {
+        topicId: topics[0]._id,
+        submissionId: submission1._id,
+        commentId: submission1.comments[0]._id,
+      },
+      type: 'comment',
+      note: 'Bình luận đáng chú ý',
+      createdAt: now,
+      updatedAt: now,
+    },
+  ]
+
   await ranksCollection.insertMany(ranks)
   await usersCollection.insertMany(users)
   await topicsCollection.insertMany(topics)
   await notificationsCollection.insertMany(notifications)
+  await bookmarksCollection.insertMany(bookmarks)
 
   console.log('Seed completed:', {
     users: users.length,
     topics: topics.length,
+    topicReactions: topics.reduce((total, topic) => total + (topic.reactions?.like.length || 0) + (topic.reactions?.dislike.length || 0), 0),
+    bookmarks: bookmarks.length,
   })
 
   await mongoose.disconnect()

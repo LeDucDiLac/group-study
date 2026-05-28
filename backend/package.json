@@ -9,12 +9,16 @@
     "seed": "node scripts/seed.js",
     "test:rank": "node scripts/test-rank-service.js",
     "test:notification": "node scripts/test-notification-service.js",
-    "test:system-notification": "node scripts/test-system-notification-service.js"
+    "test:system-notification": "node scripts/test-system-notification-service.js",
+    "test:submissions": "node scripts/test-submissions-routes.js"
   },
   "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.0",
     "mongoose": "^8.8.4",
     "morgan": "^1.10.0"
   }

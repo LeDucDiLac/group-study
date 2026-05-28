@@ -5,7 +5,7 @@
 @tailwind utilities;
 
 @layer base {
-  *, *::before, *::after {
+  * {
     box-sizing: border-box;
   }
 
@@ -15,15 +15,12 @@
   }
 
   body {
-    @apply bg-surface text-ink font-sans;
+    @apply bg-surface font-sans text-ink;
+    margin: 0;
     font-size: 16px;
-    line-height: 1.6;
-    font-feature-settings: "cv02", "cv03", "cv04", "tnum";
+    line-height: 1.55;
+    font-feature-settings: "tnum";
   }
-
-  h1 { @apply text-display font-bold text-primary-container; }
-  h2 { @apply text-[36px] font-bold text-primary-container leading-tight; }
-  h3 { @apply text-[22px] font-bold text-primary-container leading-snug; }
 
   ::selection {
     background: #FCEBE8;
@@ -32,44 +29,7 @@
 }
 
 @layer components {
-  /* ── Scrollbar ── */
-  .scrollbar-thin {
-    scrollbar-width: thin;
-    scrollbar-color: theme('colors.border.DEFAULT') transparent;
-  }
-
-  /* ── Focus ring ── */
   .focus-ring {
     @apply focus:outline-none focus:ring-2 focus:ring-secondary-container focus:ring-offset-1;
   }
-
-  /* ── Glass backdrop ── */
-  .glass {
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    @apply bg-white/80;
-  }
-
-  /* ── Abstract gradient fills for shapes ── */
-  .shape-gradient-primary {
-    background: linear-gradient(135deg, #34303A 0%, #25222B 100%);
-  }
-  .shape-gradient-blue {
-    background: linear-gradient(135deg, #E1584D 0%, #CF3A32 100%);
-  }
-  .shape-gradient-emerald {
-    background: linear-gradient(135deg, #2F9A73 0%, #176F51 100%);
-  }
-  .shape-gradient-amber {
-    background: linear-gradient(135deg, #FFD166 0%, #8A5200 100%);
-  }
-  .shape-gradient-surface {
-    background: linear-gradient(135deg, #FFFFFF 0%, #F7F2EF 100%);
-  }
-}
-
-@layer utilities {
-  .text-balance { text-wrap: balance; }
-  .content-max { @apply max-w-content mx-auto px-6; }
-  .reading-max { @apply max-w-reading mx-auto px-6; }
 }

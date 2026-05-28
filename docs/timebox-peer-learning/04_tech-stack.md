@@ -13,195 +13,6 @@
 
 ---
 
-## Stack Khuyến Nghị (Option A — Nhanh nhất)
-
-| Tầng | Công nghệ | Lý do |
-|------|----------|-------|
-| **Frontend** | React + Vite | Nhanh, quen thuộc, ecosystem tốt |
-| **Styling** | Tailwind CSS | Phù hợp với Design System token-based |
-| **Icons** | Lucide React | Nhất quán, open-source |
-| **Font** | Google Fonts (Inter) | Miễn phí, CDN nhanh |
-| **Backend + DB + Auth** | Supabase | BaaS, PostgreSQL sẵn có, Auth sẵn có, Storage sẵn có, Free tier 500MB |
-| **File Upload** | Supabase Storage | Tích hợp sẵn với Supabase |
-| **Deploy Frontend** | Vercel | Miễn phí, CI/CD tự động từ GitHub |
-| **Domain** | Vercel subdomain (.vercel.app) | Miễn phí, không cần mua domain |
-
-**Tổng chi phí MCP: $0/tháng**
-
----
-
-## Stack Thay Thế (Option B — Nếu team muốn tự build backend)
-
-| Tầng | Công nghệ | Ghi chú |
-|------|----------|---------|
-| **Frontend** | Next.js 14 (App Router) | SSR tốt hơn cho SEO |
-| **Backend** | Express.js hoặc FastAPI | Tuỳ team quen ngôn ngữ nào |
-| **Database** | PostgreSQL (Railway) | $5/tháng cho Railway Starter |
-| **Auth** | JWT + bcrypt | Tự implement |
-| **File Upload** | Cloudinary free tier | 25GB storage miễn phí |
-| **Deploy** | Railway (backend) + Vercel (frontend) | |
-
----
-
-## Cấu Trúc Thư Mục (Option A với Supabase)
-
-```
-timebox-peer-learning/
-├── src/
-│   ├── components/
-│   │   ├── ui/              # Button, Card, Badge, Avatar...
-│   │   ├── topic/           # TopicCard, TopicDetail
-│   │   ├── learn/           # Timer, TextEditor, FileUpload
-│   │   └── peer/            # SubmissionCard, CommentThread
-│   ├── pages/
-│   │   ├── LoginPage.jsx
-│   │   ├── TopicsPage.jsx
-│   │   ├── TopicDetailPage.jsx
-│   │   ├── LearnPage.jsx
-│   │   ├── PeerLearningPage.jsx
-│   │   └── SubmissionDetailPage.jsx
-│   ├── lib/
-│   │   ├── supabase.js      # Supabase client config
-│   │   └── api.js           # API helper functions
-│   ├── hooks/
-│   │   ├── useAuth.js
-│   │   ├── useTimer.js
-│   │   └── useSubmission.js
-│   ├── stores/              # Zustand state management
-│   └── styles/
-│       └── index.css        # Tailwind + custom tokens
-├── public/
-├── .env.local               # Supabase URL + API key
-├── tailwind.config.js
-└── vite.config.js
-```
-
----
-
-## Supabase Database Schema (SQL)
-
-```sql
--- Users (managed by Supabase Auth, extend with profile)
-CREATE TABLE profiles (
-  id UUID REFERENCES auth.users PRIMARY KEY,
-  display_name TEXT NOT NULL,
-  avatar_url TEXT,
-  bio TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Topics
-CREATE TABLE topics (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  title TEXT NOT NULL,
-  description TEXT,
-  category TEXT,
-  tags TEXT[],
-  -- Window người dùng có thể nộp bài (tính từ lúc topic được duyệt)
-  window_hours INT DEFAULT 48,       -- Mặc định 2 ngày = 48 giờ
-  window_start_at TIMESTAMPTZ,       -- Thời điểm mở (sau khi Admin duyệt)
-  window_end_at TIMESTAMPTZ,         -- Thời điểm đóng nộp bài
-  max_participants INT,
-  -- Trạng thái phê duyệt của Admin
-  status TEXT DEFAULT 'pending'
-    CHECK (status IN ('pending', 'approved', 'rejected', 'closed')),
-  rejection_reason TEXT,             -- Lý do từ chối (bắt buộc nếu rejected)
-  proposal_reason TEXT,              -- Lý do người dùng đề xuất chủ đề
-  created_by UUID REFERENCES profiles(id),
-  approved_by UUID REFERENCES profiles(id),
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  approved_at TIMESTAMPTZ
-);
-
--- Topic Resources (tài liệu đính kèm)
-CREATE TABLE topic_resources (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  topic_id UUID REFERENCES topics(id) ON DELETE CASCADE,
-  type TEXT CHECK (type IN ('link', 'file')),
-  label TEXT,
-  url TEXT NOT NULL
-);
-
--- Submissions (bài nộp)
-CREATE TABLE submissions (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  topic_id UUID REFERENCES topics(id),
-  user_id UUID REFERENCES profiles(id),
-  understood TEXT,            -- Những gì hiểu
-  not_understood TEXT,        -- Những gì chưa hiểu
-  is_anonymous BOOLEAN DEFAULT FALSE, -- TRUE = ẩn danh, hệ thống vẫn lưu user_id nhưng không expose
-  time_spent_seconds INT,     -- Thời gian học thực tế (giây)
-  is_locked BOOLEAN DEFAULT TRUE,     -- Luôn TRUE sau khi nộp, không cho sửa
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(topic_id, user_id)   -- Mỗi user chỉ nộp 1 bài/chủ đề
-);
-
--- Submission Resources
-CREATE TABLE submission_resources (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  submission_id UUID REFERENCES submissions(id) ON DELETE CASCADE,
-  type TEXT CHECK (type IN ('link', 'file')),
-  label TEXT,
-  url TEXT NOT NULL
-);
-
--- Likes
-CREATE TABLE likes (
-  submission_id UUID REFERENCES submissions(id),
-  user_id UUID REFERENCES profiles(id),
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  PRIMARY KEY (submission_id, user_id)
-);
-
--- Comments
-CREATE TABLE comments (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  submission_id UUID REFERENCES submissions(id),
-  user_id UUID REFERENCES profiles(id),
-  parent_id UUID REFERENCES comments(id),  -- NULL = top-level
-  content TEXT NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-```
-
----
-
-## Row Level Security (RLS) Policies
-
-```sql
--- Profiles: ai cũng đọc được, chỉ owner mới sửa
-ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Public profiles are viewable by everyone" ON profiles FOR SELECT USING (true);
-CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
-
--- Submissions: chỉ đọc được nếu BẢN THÂN ĐÃ NỘP BÀI trong cùng topic (gate cứng)
-CREATE POLICY "Can view submissions only if you submitted in same topic" ON submissions
-  FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM submissions my_sub
-      WHERE my_sub.topic_id = submissions.topic_id
-      AND my_sub.user_id = auth.uid()
-    )
-  );
-
--- Submissions: chỉ tạo được 1 bài/topic, trong window 48h
-CREATE POLICY "Users can insert own submission within window" ON submissions
-  FOR INSERT WITH CHECK (
-    auth.uid() = user_id
-    AND EXISTS (
-      SELECT 1 FROM topics t
-      WHERE t.id = topic_id
-      AND t.status = 'approved'
-      AND NOW() BETWEEN t.window_start_at AND t.window_end_at
-    )
-  );
-
--- NOTE: Khi query submissions để hiển thị, frontend cần:
--- IF is_anonymous = TRUE → thay thế display_name = 'Người dùng ẩn danh', avatar = default
--- KHÔNG expose user_id của bài ẩn danh ra ngoài API (xử lý ở tầng API/RPC)
-```
-
----
 
 ## MongoDB Data Model (Option C)
 
@@ -217,10 +28,24 @@ CREATE POLICY "Users can insert own submission within window" ON submissions
   email: String,
   passwordHash: String,
   displayName: String,
-  avatarUrl: String,
   bio: String,
   role: "learner" | "admin",
   rank: Number,             // tong diem rank
+  submissionPeekedAt: Date, // ngay da dung quyen xem bai nop (rank 4-5)
+  submissionPeekedTopicId: ObjectId, // topic da dung quyen trong ngay
+  recentActivities: [
+    {
+      _id: ObjectId,
+      title: String,
+      target: Object, // { topicId, submissionId, commentId, subCommentId }
+      createdAt: Date,
+    }
+  ], // tối đa 3 phần tử
+  summary: {
+    submissions: [Object],        // { topicId, submissionId }
+    likesReceived: Number,        // tổng số like đã nhận
+    liked: [Object],              // { topicId, submissionId, commentId }
+  },
   createdAt: Date,
   updatedAt: Date,
 }
@@ -255,6 +80,25 @@ CREATE POLICY "Users can insert own submission within window" ON submissions
   },
   isRead: Boolean,
   createdAt: Date,
+}
+```
+
+#### bookmarks
+
+```
+{
+  _id: ObjectId,
+  userId: ObjectId,          // users._id
+  target: {
+    topicId: ObjectId,
+    submissionId: ObjectId,
+    commentId: ObjectId,
+    subCommentId: ObjectId,
+  },
+  type: "topic" | "submission" | "comment",
+  note: String,
+  createdAt: Date,
+  updatedAt: Date,
 }
 ```
 

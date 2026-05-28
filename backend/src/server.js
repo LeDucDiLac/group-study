@@ -2,12 +2,14 @@ import express from 'express'
 import cors from 'cors'
 import morgan from 'morgan'
 import dotenv from 'dotenv'
+import cookieParser from 'cookie-parser'
 import mongoose from 'mongoose'
 import healthRoutes from './routes/healthRoutes.js'
 import authRoutes from './routes/authRoutes.js'
 import topicsRoutes from './routes/topicsRoutes.js'
 import submissionsRoutes from './routes/submissionsRoutes.js'
 import commentsRoutes from './routes/commentsRoutes.js'
+import bookmarksRoutes from './routes/bookmarksRoutes.js'
 import rankRoutes from './routes/rankRoutes.js'
 import { placeholder } from './utils/placeholder.js'
 
@@ -15,8 +17,9 @@ dotenv.config()
 
 const app = express()
 
-app.use(cors())
+app.use(cors({ origin: true, credentials: true }))
 app.use(express.json())
+app.use(cookieParser())
 app.use(morgan('dev'))
 
 const PORT = process.env.PORT || 3001
@@ -45,6 +48,7 @@ app.use('/api/auth', authRoutes)
 app.use('/api/topics', topicsRoutes)
 app.use('/api/submissions', submissionsRoutes)
 app.use('/api/comments', commentsRoutes)
+app.use('/api/bookmarks', bookmarksRoutes)
 app.use('/api/rank', rankRoutes)
 
 // Fallback

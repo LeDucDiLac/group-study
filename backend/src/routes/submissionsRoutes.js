@@ -1,15 +1,16 @@
 import { Router } from 'express'
 import {
   createSubmission,
-  getSubmission,
-  listSubmissions,
+  listMySubmissions,
+  listTopicSubmissions,
+  peekSubmissions,
 } from '../controllers/submissionsController.js'
-import { authMiddleware } from '../middleware/authMiddleware.js'
+import authMiddleware from '../middleware/authMiddleware.js'
 
 const router = Router()
 
-router.get('/', listSubmissions)
+router.get('/topic/:topicId', authMiddleware, listTopicSubmissions)
+router.get('/mine', authMiddleware, listMySubmissions)
 router.post('/', authMiddleware, createSubmission)
-router.get('/:id', getSubmission)
-
+router.post('/peek/:topicId', authMiddleware, peekSubmissions)
 export default router

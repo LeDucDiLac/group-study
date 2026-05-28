@@ -77,6 +77,7 @@ const submissionResourceSchema = new Schema(
   { _id: false }
 )
 
+
 const submissionSchema = new Schema(
   {
     userId: {
@@ -159,11 +160,23 @@ const topicSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: 'User',
     },
+    proposalReason: {
+      type: String,
+      trim: true,
+    },
+    rejectionReason: {
+      type: String,
+      trim: true,
+    },
     status: {
       type: String,
       enum: ['Chưa duyệt', 'Bị từ chối', 'Đang mở', 'Đã hoàn thành'],
       default: 'Chưa duyệt',
       trim: true,
+    },
+    reactions: {
+      like: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+      dislike: [{ type: Schema.Types.ObjectId, ref: 'User' }],
     },
     resources: [topicResourceSchema],
     Participation: [participationSchema],
@@ -242,5 +255,19 @@ topicSchema.statics.findTargetByCommentId = async function findTargetByCommentId
 }
 
 const Topic = mongoose.models.Topic || mongoose.model('Topic', topicSchema)
+
+export function listTopics(filter = {}, options = {}) {
+  
+  const { page = 1, limit = 10 } = options
+  if (page && limit) {
+    return Topic.find(filter)
+      .select('-proposalReason -rejectionReason, -approvedBy -approvedAt')
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+  } else {
+    return Topic.find(filter).sort({ createdAt: -1 })
+  }
+}
 
 export default Topic

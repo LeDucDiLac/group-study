@@ -1,18 +1,28 @@
 import { Router } from 'express'
 import {
-  approveTopic,
+  listTopics,
   createTopic,
   getTopic,
-  listTopics,
   updateTopic,
+  approveTopic,
+  rejectTopic,
+  markTopicCompleted,
 } from '../controllers/topicsController.js'
 
 const router = Router()
+const multer = require('multer')
+const upload = multer({ dest: 'uploads/resources/' })
 
 router.get('/', listTopics)
-router.post('/', createTopic)
+router.post('/', authMiddleware, createTopic)
 router.get('/:id', getTopic)
-router.patch('/:id', updateTopic)
-router.post('/:id/approve', approveTopic)
-
+router.patch('/:id', authMiddleware, updateTopic)
+router.post('/:id/approve', authMiddleware, approveTopic)
+router.post('/:id/reject', authMiddleware, rejectTopic)
+router.post('/:id/mark-completed', authMiddleware, markTopicCompleted)
+router.post('/uploads', upload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
+  const fileUrl = `/uploads/resources/${req.file.filename}`
+  res.json({ url: fileUrl })
+})
 export default router

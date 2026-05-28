@@ -211,7 +211,7 @@
 
 ### 4.10 Hồ sơ cá nhân (Profile)
 **Hệ thống Rank (10 cấp bậc)**
-1. Tập sự: Được phép tạo chủ đề, bài nộp cần phê duyệt, được phép xem bài nộp của người khác, được phép like/dislike
+1. Tập sự: Được phép tạo chủ đề, bài nộp cần phê duyệt, được phép xem bài nộp của người khác sau khi nộp, được phép like/dislike
 2. Tân binh: được phép comment
 3. Sinh viên chính thức: bài nộp không cần phê duyệt
 4. Sinh viên kỳ cựu: Mỗi ngày 1 lần xem bài nộp của người khác nmà không cần hoàn thành chủ đề.
