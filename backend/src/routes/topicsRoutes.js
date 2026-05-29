@@ -7,6 +7,7 @@ import {
   approveTopic,
   rejectTopic,
   markTopicCompleted,
+  getUnapprovedTopics,
 } from '../controllers/topicsController.js'
 import multer from 'multer'
 import authMiddleware from '../middleware/authMiddleware.js'
@@ -26,4 +27,6 @@ router.post('/uploads', upload.single('file'), (req, res) => {
   const fileUrl = `/uploads/resources/${req.file.filename}`
   res.json({ url: fileUrl })
 })
+router.get('/unapproved', authMiddleware, getUnapprovedTopics)
+
 export default router

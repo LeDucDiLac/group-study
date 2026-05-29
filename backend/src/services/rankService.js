@@ -171,6 +171,7 @@ export async function addPointsForTopicApproved({ topicOwnerId }) {
   const updated = await applyPointsDelta(recipientId, 50)
   return { applied: true, ...updated }
 }
+
 // +10 điểm khi chủ đề do người dùng tạo được like.
 export async function addPointsForTopicLike({ topicOwnerId, actorId }) {
   return applyInteractionPoints({

@@ -1,8 +1,9 @@
 import mongoose from 'mongoose'
 import Topic from '../models/Topic.js'
 import User from '../models/User.js'
-import { addPointsForSubmissionApproved } from '../services/rankService.js'
+import { addPointsForSubmissionApproved, addPointsForTopicSubmission } from '../services/rankService.js'
 import { placeholder } from '../utils/placeholder.js'
+import { addSubmissionToSummary } from '../services/profileService.js'
 
 function isValidResources(resources) {
   if (!Array.isArray(resources)) {
@@ -244,6 +245,8 @@ export async function createSubmission(req, res, next) {
 
     if (shouldAutoApprove) {
       await addPointsForSubmissionApproved({ submissionOwnerId: userObjectId })
+      await addPointsForTopicSubmission({ topicOwnerId: topic.createdBy, submissionOwnerId: userObjectId })
+      await addSubmissionToSummary(userId, topicId, createdSubmission._id)
     }
 
     return res.status(201).json(createdSubmission || submission)
@@ -385,6 +388,116 @@ export async function peekSubmissions(req, res, next) {
     })
   }
     catch (error) {
+    return next(error)
+  }
+}
+
+export async function approveSubmission(req, res, next) {
+  const { submissionId } = req.params
+  const userId = String(req.user._id)
+  const role = req.user.role
+
+  if (!userId) {
+    return res.status(401).json({ error: 'Bạn cần đăng nhập để duyệt bài nộp.' })
+  }
+
+  if (role !== 'admin') {
+    return res.status(403).json({ error: 'Bạn không có quyền duyệt bài nộp.' })
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(submissionId)) {
+    return res.status(400).json({ error: 'Liên kết bài nộp không hợp lệ.' })
+  }
+
+  try {
+    const topic = await Topic.findOneAndUpdate(
+      { 'submissions._id': submissionId },
+      { $set: { 'submissions.$.status': 'Đã duyệt' } },
+      { new: true }
+    ).lean()
+
+    if (!topic) {
+      return res.status(404).json({ error: 'Không tìm thấy bài nộp.' })
+    }
+
+    const submission = topic.submissions.find((s) => s._id.toString() === submissionId)
+    if (!submission) {
+      return res.status(404).json({ error: 'Không tìm thấy bài nộp.' })
+    }
+
+    await addPointsForSubmissionApproved({ submissionOwnerId: submission.userId })
+    await addPointsForTopicSubmission({ topicOwnerId: topic.createdBy, submissionOwnerId: submission.userId })
+    await addSubmissionToSummary(submission.userId, topic._id, submission._id)
+    return res.json({ ok: true })
+  } catch (error) {
+    return next(error)
+  }
+}
+
+export async function rejectSubmission(req, res, next) {
+  const { submissionId } = req.params
+  const userId = String(req.user._id)
+  const role = req.user.role
+
+  if (!userId) {
+    return res.status(401).json({ error: 'Bạn cần đăng nhập để từ chối bài nộp.' })
+  }
+
+  if (role !== 'admin') {
+    return res.status(403).json({ error: 'Bạn không có quyền từ chối bài nộp.' })
+  } 
+
+  if (!mongoose.Types.ObjectId.isValid(submissionId)) {
+    return res.status(400).json({ error: 'Liên kết bài nộp không hợp lệ.' })
+  }
+  
+  try {
+    const topic = await Topic.findOneAndUpdate(
+      { 'submissions._id': submissionId },
+      { $set: { 'submissions.$.status': 'Đã từ chối' } },
+      { new: true }
+    ).lean()
+
+    if (!topic) {
+      return res.status(404).json({ error: 'Không tìm thấy bài nộp.' })
+    }
+
+    const submission = topic.submissions.find((s) => s._id.toString() === submissionId)
+    if (!submission) {
+      return res.status(404).json({ error: 'Không tìm thấy bài nộp.' })
+    }
+
+    return res.json({ ok: true })
+  } catch (error) {
+    return next(error)
+  }
+}
+
+export async function getUnapprovedSubmissions(req, res, next) {
+  const role = req.user.role
+
+  if (role !== 'admin') {
+    return res.status(403).json({ error: 'Bạn không có quyền xem các bài nộp chưa được duyệt.' })
+  }
+
+  try {
+    const topics = await Topic.find({ 'submissions.status': 'Chưa duyệt' })
+      .select('title submissions')
+      .lean()
+    const items = []
+    for (const topic of topics) {
+      const unapproved = Array.isArray(topic.submissions) ? topic.submissions.filter((s) => s.status === 'Chưa duyệt') : []
+      for (const submission of unapproved) {
+        items.push({
+          topicId: topic._id?.toString(),
+          topicTitle: topic.title,
+          submission: normalizeSubmission(submission),
+        })
+      }
+    }
+    return res.json({ items })
+  }
+  catch (error) {
     return next(error)
   }
 }

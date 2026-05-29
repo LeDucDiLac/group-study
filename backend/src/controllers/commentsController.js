@@ -1,7 +1,12 @@
 import { placeholder } from '../utils/placeholder.js'
 import Topic from '../models/Topic.js'
+import { addPointsForTopicComment } from '../services/rankService.js'
 
 export async function createComment(req, res) {
+  const userId = String(req.user._id)
+  if (!userId)
+    return res.status(401).json({ error: 'Bạn cần đăng nhập để bình luận' })
+
   const { topicId, submissionId, commentId, content } = req.body
   
   if (!topicId || !submissionId || !content) {
@@ -18,9 +23,10 @@ export async function createComment(req, res) {
     if (!parentComment) return res.status(404).json({ error: 'Bình luận không tồn tại' })
     parentComment.subComments.push({
       content,
-      createdBy: req.user._id,
+      createdBy: userId,
     })
     await topic.save()
+    await addPointsForTopicComment({ topicOwnerId: topic.createdBy, actorId: userId })
     return res.json({ comment: parentComment.subComments[parentComment.subComments.length - 1] })
   } else {
     // Bình luận vào submission
@@ -30,9 +36,10 @@ export async function createComment(req, res) {
     if (!submission) return res.status(404).json({ error: 'Bài nộp không tồn tại' })
     submission.comments.push({
       content,
-      createdBy: req.user._id,
+      createdBy: userId,
     })
     await topic.save()
+    await addPointsForTopicComment({ topicOwnerId: topic.createdBy, actorId: userId })
     return res.json({ comment: submission.comments[submission.comments.length - 1] })
   }
 }

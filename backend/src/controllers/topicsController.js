@@ -1,5 +1,5 @@
 import mongoose from 'mongoose'
-import { placeholder } from '../utils/placeholder.js'
+import { addPointsForTopicApproved } from '../services/rankService.js'
 import Topic from '../models/Topic.js'
 
 export function listTopics(req, res) {
@@ -52,6 +52,7 @@ export function createTopic(req, res) {
     newTopic.status = 'Đang mở'
     newTopic.approvedBy = req.user._id
     newTopic.approvedAt = new Date()
+    addPointsForTopicApproved({ topicOwnerId: user_id })
   }
 
   newTopic.save().then(topic => {
@@ -119,6 +120,7 @@ export function approveTopic(req, res) {
     topic.status = 'Đang mở'
     topic.approvedBy = userId
     topic.approvedAt = new Date()
+    addPointsForTopicApproved({ topicOwnerId: String(topic.createdBy) })
     return topic.save()
   }).then(updated => {
     res.json(updated)
@@ -175,3 +177,15 @@ export function markTopicCompleted(req, res) {
     res.status(500).json({ error: 'Lỗi server' })
   })
 }
+
+export function getUnapprovedTopics(req, res) {
+  const role = req.user.role
+  if (role !== 'admin')
+    return res.status(403).json({ error: 'Chỉ admin mới có quyền xem các topic đang chờ duyệt' })
+  Topic.find({ status: 'Chưa duyệt' }).then(topics => {
+    res.json(topics)
+  }).catch(err => {
+    res.status(500).json({ error: 'Lỗi server' })
+  })
+}
+
