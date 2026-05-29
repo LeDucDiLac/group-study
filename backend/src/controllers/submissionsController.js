@@ -2,7 +2,6 @@ import mongoose from 'mongoose'
 import Topic from '../models/Topic.js'
 import User from '../models/User.js'
 import { addPointsForSubmissionApproved, addPointsForTopicSubmission } from '../services/rankService.js'
-import { placeholder } from '../utils/placeholder.js'
 import { addSubmissionToSummary } from '../services/profileService.js'
 
 function isValidResources(resources) {

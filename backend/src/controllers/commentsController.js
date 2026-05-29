@@ -1,4 +1,3 @@
-import { placeholder } from '../utils/placeholder.js'
 import Topic from '../models/Topic.js'
 import { addPointsForTopicComment } from '../services/rankService.js'
 

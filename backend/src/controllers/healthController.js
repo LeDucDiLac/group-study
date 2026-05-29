@@ -1,5 +1,3 @@
-import { placeholder } from '../utils/placeholder.js'
-
 export function getHealth(req, res) {
-  res.json(placeholder({ status: 'ok' }))
+  res.json({ status: 'ok', timestamp: new Date().toISOString() })
 }

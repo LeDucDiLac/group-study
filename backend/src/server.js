@@ -10,7 +10,6 @@ import topicsRoutes from './routes/topicsRoutes.js'
 import submissionsRoutes from './routes/submissionsRoutes.js'
 import commentsRoutes from './routes/commentsRoutes.js'
 import bookmarksRoutes from './routes/bookmarksRoutes.js'
-import { placeholder } from './utils/placeholder.js'
 
 dotenv.config()
 
@@ -51,11 +50,11 @@ app.use('/api/bookmarks', bookmarksRoutes)
 
 // Fallback
 app.use((req, res) => {
-  res.status(404).json(placeholder({ error: 'Not found' }))
+  res.status(404).json({ error: 'Not found' })
 })
 
 app.use((err, req, res, next) => {
-  res.status(500).json(placeholder({ error: err.message || 'Server error' }))
+  res.status(500).json({ error: err.message || 'Server error' })
 })
 
 connectDb().finally(() => {
