@@ -22,19 +22,20 @@ export default async function authMiddleware(req, res, next) {
 
   try {
     const payload = jwt.verify(token, JWT_SECRET)
-    const userId = payload?.sub
+    const userId = payload.id
     if (!userId) return res.status(401).json({ error: 'Token không hợp lệ' })
 
     let user = null
     try {
       user = await User.findById(userId)
     } catch (error) {
-      return res.status(401).json({ error: 'Token không hợp lệ' })
+      return res.status(401).json({ error: 'Nguời dùng không tồn tại' })
     }
 
     req.user = user
     return next()
   } catch (error) {
+    console.error('Lỗi xác thực token:', error.message)
     return res.status(401).json({ error: 'Token không hợp lệ' })
   }
 }

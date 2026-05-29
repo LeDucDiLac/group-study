@@ -5,8 +5,8 @@ import User from '../models/User.js'
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret'
 const COOKIE_NAME = 'tb_token'
 
-function signToken(user) {
-  return jwt.sign({ sub: String(user._id), role: user.role ?? 'learner' }, JWT_SECRET, { expiresIn: '7d' })
+function signToken(data) {
+  return jwt.sign(data, JWT_SECRET, { expiresIn: '30d' })
 }
 
 export async function register(req, res) {

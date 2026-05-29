@@ -1,5 +1,6 @@
 import { placeholder } from '../utils/placeholder.js'
 import Topic from '../models/Topic.js'
+import { addPointsForTopicLike, addPointsForSubmissionLike, addPointsForCommentLike, removePointsForCommentLikeCancellation, removePointsForSubmissionLikeCancellation, removePointsForTopicLikeCancellation } from '../services/rankService.js'
 
 export async function like(req, res) {
     const userId = String(req.user._id)
@@ -25,6 +26,7 @@ export async function like(req, res) {
                 subComment.reactions.like.push(userId)
                 // Remove dislike if exists
                 subComment.reactions.dislike = subComment.reactions.dislike.filter(id => String(id) !== userId)
+                await addPointsForCommentLike({ commentOwnerId: subComment.ownerId, actorId: userId })
             } else {
                 if (comment.reactions.like.includes(userId)) {
                     return res.status(400).json({ error: 'Bạn đã thích bình luận này' })
@@ -32,6 +34,7 @@ export async function like(req, res) {
                 comment.reactions.like.push(userId)
                 // Remove dislike if exists
                 comment.reactions.dislike = comment.reactions.dislike.filter(id => String(id) !== userId)
+                await addPointsForCommentLike({ commentOwnerId: comment.ownerId, actorId: userId })
             }
         } else {
             if (submission.reactions.like.includes(userId)) {
@@ -40,6 +43,7 @@ export async function like(req, res) {
             submission.reactions.like.push(userId)
             // Remove dislike if exists
             submission.reactions.dislike = submission.reactions.dislike.filter(id => String(id) !== userId)
+            await addPointsForSubmissionLike({ submissionOwnerId: submission.ownerId, actorId: userId })
         }
     } else {
         if (topic.reactions.like.includes(userId)) {
@@ -48,6 +52,7 @@ export async function like(req, res) {
         topic.reactions.like.push(userId)
         // Remove dislike if exists
         topic.reactions.dislike = topic.reactions.dislike.filter(id => String(id) !== userId)
+        await addPointsForTopicLike({ topicOwnerId: topic.ownerId, actorId: userId })
     }
 
     await topic.save()
@@ -125,19 +130,43 @@ export async function cancelReaction(req, res) {
             if (subCommentId) {
                 const subComment = comment.subComments.id(subCommentId)
                 if (!subComment) return res.status(404).json({ error: 'Bình luận không tồn tại' })
-                subComment.reactions.like = subComment.reactions.like.filter(id => String(id) !== userId)
-                subComment.reactions.dislike = subComment.reactions.dislike.filter(id => String(id) !== userId)
+                if (subComment.reactions.like.includes(userId)) {
+                    await removePointsForCommentLikeCancellation({ commentOwnerId: subComment.ownerId, actorId: userId })
+                    subComment.reactions.like = subComment.reactions.like.filter(id => String(id) !== userId)
+                } else if (subComment.reactions.dislike.includes(userId)) {
+                    subComment.reactions.dislike = subComment.reactions.dislike.filter(id => String(id) !== userId)
+                } else {
+                    return res.status(400).json({ error: 'Bạn chưa phản ứng với bình luận này' })
+                }
             } else {
-                comment.reactions.like = comment.reactions.like.filter(id => String(id) !== userId)
-                comment.reactions.dislike = comment.reactions.dislike.filter(id => String(id) !== userId)
+                if (comment.reactions.like.includes(userId)) {
+                    await removePointsForCommentLikeCancellation({ commentOwnerId: comment.ownerId, actorId: userId })
+                    comment.reactions.like = comment.reactions.like.filter(id => String(id) !== userId)
+                } else if (comment.reactions.dislike.includes(userId)) {
+                    comment.reactions.dislike = comment.reactions.dislike.filter(id => String(id) !== userId)
+                } else {
+                    return res.status(400).json({ error: 'Bạn chưa phản ứng với bình luận này' })
+                }
             }
         } else {
-            submission.reactions.like = submission.reactions.like.filter(id => String(id) !== userId)
-            submission.reactions.dislike = submission.reactions.dislike.filter(id => String(id) !== userId)
+            if (submission.reactions.like.includes(userId)) {
+                await removePointsForSubmissionLikeCancellation({ submissionOwnerId: submission.ownerId, actorId: userId })
+                submission.reactions.like = submission.reactions.like.filter(id => String(id) !== userId)
+            } else if (submission.reactions.dislike.includes(userId)) {
+                submission.reactions.dislike = submission.reactions.dislike.filter(id => String(id) !== userId)
+            } else {
+                return res.status(400).json({ error: 'Bạn chưa phản ứng với bài nộp này' })
+            }   
         }
     } else {
-        topic.reactions.like = topic.reactions.like.filter(id => String(id) !== userId)
-        topic.reactions.dislike = topic.reactions.dislike.filter(id => String(id) !== userId)
+        if (topic.reactions.like.includes(userId)) {
+            await removePointsForTopicLikeCancellation({ topicOwnerId: topic.ownerId, actorId: userId })
+            topic.reactions.like = topic.reactions.like.filter(id => String(id) !== userId)
+        } else if (topic.reactions.dislike.includes(userId)) {
+            topic.reactions.dislike = topic.reactions.dislike.filter(id => String(id) !== userId)
+        } else {
+            return res.status(400).json({ error: 'Bạn chưa phản ứng với chủ đề này' })
+        }
     }
 
     await topic.save()

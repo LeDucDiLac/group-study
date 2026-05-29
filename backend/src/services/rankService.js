@@ -125,6 +125,14 @@ export async function addPointsForCommentLike({ commentOwnerId, actorId }) {
   })
 }
 
+export async function removePointsForCommentLikeCancellation({ commentOwnerId, actorId }) {
+  return applyInteractionPoints({
+    targetUserId: commentOwnerId,
+    actorId,
+    delta: -5,
+  })
+}
+
 // +20 điểm khi bài nộp được duyệt.
 export async function addPointsForSubmissionApproved({ submissionOwnerId }) {
   const recipientId = toObjectId(submissionOwnerId, 'submissionOwnerId')
@@ -145,6 +153,14 @@ export async function addPointsForSubmissionLike({ submissionOwnerId, actorId })
   })
 }
 
+export async function removePointsForSubmissionLikeCancellation({ submissionOwnerId, actorId }) {
+  return applyInteractionPoints({
+    targetUserId: submissionOwnerId,
+    actorId,
+    delta: -10,
+  })
+}
+
 // +50 điểm khi chủ đề do người dùng tạo được duyệt.
 export async function addPointsForTopicApproved({ topicOwnerId }) {
   const recipientId = toObjectId(topicOwnerId, 'topicOwnerId')
@@ -154,6 +170,22 @@ export async function addPointsForTopicApproved({ topicOwnerId }) {
 
   const updated = await applyPointsDelta(recipientId, 50)
   return { applied: true, ...updated }
+}
+// +10 điểm khi chủ đề do người dùng tạo được like.
+export async function addPointsForTopicLike({ topicOwnerId, actorId }) {
+  return applyInteractionPoints({
+    targetUserId: topicOwnerId,
+    actorId,
+    delta: 10,
+  })
+}
+
+export async function removePointsForTopicLikeCancellation({ topicOwnerId, actorId }) {
+  return applyInteractionPoints({
+    targetUserId: topicOwnerId,
+    actorId,
+    delta: -10,
+  })
 }
 
 // +15 điểm cho mỗi bài nộp của cộng đồng trên chủ đề của người dùng.
