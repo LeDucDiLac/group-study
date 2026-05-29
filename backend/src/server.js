@@ -10,7 +10,6 @@ import topicsRoutes from './routes/topicsRoutes.js'
 import submissionsRoutes from './routes/submissionsRoutes.js'
 import commentsRoutes from './routes/commentsRoutes.js'
 import bookmarksRoutes from './routes/bookmarksRoutes.js'
-import rankRoutes from './routes/rankRoutes.js'
 import { placeholder } from './utils/placeholder.js'
 
 dotenv.config()
@@ -49,7 +48,6 @@ app.use('/api/topics', topicsRoutes)
 app.use('/api/submissions', submissionsRoutes)
 app.use('/api/comments', commentsRoutes)
 app.use('/api/bookmarks', bookmarksRoutes)
-app.use('/api/rank', rankRoutes)
 
 // Fallback
 app.use((req, res) => {

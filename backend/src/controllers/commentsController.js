@@ -1,7 +1,7 @@
 import { placeholder } from '../utils/placeholder.js'
 import Topic from '../models/Topic.js'
 
-export function createComment(req, res) {
+export async function createComment(req, res) {
   const { topicId, submissionId, commentId, content } = req.body
   
   if (!topicId || !submissionId || !content) {

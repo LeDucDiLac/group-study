@@ -8,9 +8,10 @@ import {
   rejectTopic,
   markTopicCompleted,
 } from '../controllers/topicsController.js'
+import multer from 'multer'
+import authMiddleware from '../middleware/authMiddleware.js'
 
 const router = Router()
-const multer = require('multer')
 const upload = multer({ dest: 'uploads/resources/' })
 
 router.get('/', listTopics)
