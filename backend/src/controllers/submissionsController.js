@@ -3,6 +3,7 @@ import Topic from '../models/Topic.js'
 import User from '../models/User.js'
 import { addPointsForSubmissionApproved, addPointsForTopicSubmission } from '../services/rankService.js'
 import { addSubmissionToSummary } from '../services/profileService.js'
+import { createSystemNotification } from '../services/notificationService.js'
 
 function isValidResources(resources) {
   if (!Array.isArray(resources)) {
@@ -427,6 +428,7 @@ export async function approveSubmission(req, res, next) {
     await addPointsForSubmissionApproved({ submissionOwnerId: submission.userId })
     await addPointsForTopicSubmission({ topicOwnerId: topic.createdBy, submissionOwnerId: submission.userId })
     await addSubmissionToSummary(submission.userId, topic._id, submission._id)
+    await createSystemNotification({ userId: submission.userId, actorId: userId, title: 'Bài nộp đã được duyệt', content: `Bài nộp của bạn cho chủ đề "${topic.title}" đã được duyệt.` , target: { topicId: topic._id, submissionId: submission._id } })
     return res.json({ ok: true })
   } catch (error) {
     return next(error)
@@ -437,6 +439,7 @@ export async function rejectSubmission(req, res, next) {
   const { submissionId } = req.params
   const userId = String(req.user._id)
   const role = req.user.role
+  const reason = req.body.reason || 'Không có lý do cụ thể'
 
   if (!userId) {
     return res.status(401).json({ error: 'Bạn cần đăng nhập để từ chối bài nộp.' })
@@ -453,7 +456,7 @@ export async function rejectSubmission(req, res, next) {
   try {
     const topic = await Topic.findOneAndUpdate(
       { 'submissions._id': submissionId },
-      { $set: { 'submissions.$.status': 'Đã từ chối' } },
+      { $set: { 'submissions.$.status': 'Bị từ chối' } },
       { new: true }
     ).lean()
 
@@ -466,6 +469,7 @@ export async function rejectSubmission(req, res, next) {
       return res.status(404).json({ error: 'Không tìm thấy bài nộp.' })
     }
 
+    await createSystemNotification({ userId: submission.userId, actorId: userId, title: `Bài nộp của bạn cho chủ đề "${topic.title}" đã bị từ chối`, content: `Lý do: ${reason}`, target: { topicId: topic._id, submissionId: submission._id } })
     return res.json({ ok: true })
   } catch (error) {
     return next(error)

@@ -1,5 +1,6 @@
 import Topic from '../models/Topic.js'
 import { addPointsForTopicComment } from '../services/rankService.js'
+import { createCommentNotifications } from '../services/notificationService.js'
 
 export async function createComment(req, res) {
   const userId = String(req.user._id)
@@ -26,6 +27,7 @@ export async function createComment(req, res) {
     })
     await topic.save()
     await addPointsForTopicComment({ topicOwnerId: topic.createdBy, actorId: userId })
+    await createCommentNotifications(userId, parentComment.subComments[parentComment.subComments.length - 1]._id, content)
     return res.json({ comment: parentComment.subComments[parentComment.subComments.length - 1] })
   } else {
     // Bình luận vào submission
@@ -39,6 +41,7 @@ export async function createComment(req, res) {
     })
     await topic.save()
     await addPointsForTopicComment({ topicOwnerId: topic.createdBy, actorId: userId })
+    await createCommentNotifications(userId, submission.comments[submission.comments.length - 1]._id, content)
     return res.json({ comment: submission.comments[submission.comments.length - 1] })
   }
 }

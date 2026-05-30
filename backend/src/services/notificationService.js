@@ -223,7 +223,7 @@ export async function createCommentNotifications({
   return [...ownerNotification, ...watcherNotifications]
 }
 
-export async function createSystemNotification({ userId, actorId, title, content }) {
+export async function createSystemNotification({ userId, actorId, title, content, target }) {
   const recipientId = toObjectId(userId, 'userId')
   const adminActorId = toObjectId(actorId, 'actorId')
 
@@ -249,14 +249,7 @@ export async function createSystemNotification({ userId, actorId, title, content
     content: content.trim(),
     type: 'system',
     isRead: false,
+    target,
   })
-
-  console.log('[notificationService] system notification created', {
-    notificationId: notification._id?.toString(),
-    recipientId: recipientId.toString(),
-    actorId: adminActorId.toString(),
-    actorDisplayName: displayName,
-  })
-
   return notification
 }

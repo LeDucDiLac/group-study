@@ -100,7 +100,7 @@ const submissionSchema = new Schema(
     },
     status: {
       type: String,
-      enum: ['Chưa duyệt', 'Đã duyệt'],
+      enum: ['Chưa duyệt', 'Đã duyệt', 'Bị từ chối'],
       default: 'Chưa duyệt',
       trim: true,
     },

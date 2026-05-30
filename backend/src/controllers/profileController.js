@@ -1,5 +1,6 @@
 import User from '../models/User.js'
 import ProfileService from '../services/profileService.js'
+import { getRecentActivities } from '../services/recentActivityService.js'
 
 export async function getProfile(req, res) {
     const { userId } = req.params
@@ -32,13 +33,15 @@ export async function getSelfProfile(req, res) {
     // Lấy thêm thông tin topic đã tham gia và đã tạo và bookmarks
     const topicsParticipated = await ProfileService.fetchTopicsParticipated(userId)
     const topicsCreated = await ProfileService.fetchTopicsCreated(userId)
-    const bookmarks = await Bookmark.find({ userId }).lean()
+    const bookmarks = await ProfileService.fetchBookmarks(userId)
 
-    res.json({ profile: { ...user.toObject(), summary: { ...user.summary, topicsParticipated, topicsCreated, bookmarks } } })
+    // Lấy thông tin hoạt động gần đây
+    const recentActivity = await getRecentActivities(userId)
+    res.json({ profile: { ...user.toObject(), summary: { ...user.summary, topicsParticipated, topicsCreated, bookmarks }, recentActivity } })
 }
 
 export async function updateProfile(req, res) {
-    // chỉ chó phép update displayName, bio
+    // chỉ cho phép update displayName, bio
     const userId = String(req.params.userId)
     const { displayName, bio } = req.body || {}
     if (!displayName) return res.status(400).json({ error: 'displayName is required' })

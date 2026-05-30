@@ -134,7 +134,7 @@
       understood: String,
       notUnderstood: String,
       isAnonymous: Boolean,
-      status: "Chưa duyệt", "Đã duyệt",
+      status: "Chưa duyệt", "Đã duyệt", "Bị từ chối"
       reactions: {
         like: [ObjectId],
         dislike: [ObjectId],

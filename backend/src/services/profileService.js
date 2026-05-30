@@ -8,8 +8,13 @@ export async function addSubmissionToSummary(userId, { topicId, submissionId }) 
 }
 
 // Tăng/giảm số like đã nhận
-export async function incLikesReceived(userId, delta = 1) {
-  await User.updateOne({ _id: userId }, { $inc: { 'summary.likesReceived': delta } })
+export async function incLikesReceived(userId) {
+  await User.updateOne({ _id: userId }, { $inc: { 'summary.likesReceived': 1 } })
+}
+
+// Giảm số like đã nhận (chỉ dùng cho unlike)
+export async function decLikesReceived(userId) {
+  await User.updateOne({ _id: userId }, { $inc: { 'summary.likesReceived': -1 } })
 }
 
 // Thêm một item đã like vào summary.liked
@@ -21,9 +26,13 @@ export async function addLikedItem(userId, { topicId, submissionId, commentId, s
   await User.updateOne({ _id: userId }, { $addToSet: { 'summary.liked': likedItem } })
 }
 
-// Giảm số like đã nhận (chỉ dùng cho unlike)
-export async function decLikesReceived(userId) {
-  await incLikesReceived(userId, -1)
+// Xóa một item đã like khỏi summary.liked (dùng cho unlike)
+export async function removeLikedItem(userId, { topicId, submissionId, commentId, subCommentId }) {
+  const likedItem = { topicId, submissionId, commentId }
+    if (subCommentId) {
+        likedItem.subCommentId = subCommentId
+    }
+  await User.updateOne({ _id: userId }, { $pull: { 'summary.liked': likedItem } })
 }
 
 // --------------------

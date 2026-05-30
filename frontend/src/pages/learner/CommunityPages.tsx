@@ -839,7 +839,6 @@ export function ProfilePage() {
 export function NotificationsPage() {
   const { data: list, setData: setNotifications } = useAsync(() => notificationService.getNotifications(), [])
   const [filter, setFilter] = useState<NotificationFilter>('all')
-  const [settingsOpen, setSettingsOpen] = useState(false)
   const filtered = filterNotifications(list, filter)
   const groups = groupNotificationsByDate(filtered)
 
@@ -857,9 +856,6 @@ export function NotificationsPage() {
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" onClick={markAllRead} disabled={!list.some((notification) => !notification.read)}>
               Đánh dấu tất cả đã đọc
-            </Button>
-            <Button variant="secondary" onClick={() => setSettingsOpen(true)}>
-              Cài đặt thông báo
             </Button>
           </div>
         }
@@ -901,27 +897,6 @@ export function NotificationsPage() {
         ))}
         {!filtered.length && <EmptyState title="Không có thông báo phù hợp" description="Thử đổi bộ lọc hoặc quay lại sau khi có hoạt động mới." />}
       </div>
-
-      <Modal open={settingsOpen} title="Cài đặt thông báo" onClose={() => setSettingsOpen(false)}>
-        <div className="grid gap-3 text-sm text-ink-muted">
-          <p>Tuỳ chọn chi tiết sẽ được nối dữ liệu ở bước sau. Hiện tại hệ thống đang bật các thông báo quan trọng: bình luận, duyệt/từ chối chủ đề, đóng chủ đề và deadline.</p>
-          <label className="flex items-center justify-between rounded-md border border-border-subtle bg-surface-low px-3 py-2 font-semibold text-ink">
-            Nhận thông báo chủ đề
-            <input type="checkbox" defaultChecked />
-          </label>
-          <label className="flex items-center justify-between rounded-md border border-border-subtle bg-surface-low px-3 py-2 font-semibold text-ink">
-            Nhận thông báo bình luận
-            <input type="checkbox" defaultChecked />
-          </label>
-          <label className="flex items-center justify-between rounded-md border border-border-subtle bg-surface-low px-3 py-2 font-semibold text-ink">
-            Nhận nhắc deadline
-            <input type="checkbox" defaultChecked />
-          </label>
-        </div>
-        <div className="mt-5 flex justify-end">
-          <Button onClick={() => setSettingsOpen(false)}>Đã hiểu</Button>
-        </div>
-      </Modal>
     </div>
   )
 }
