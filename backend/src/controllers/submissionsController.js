@@ -69,8 +69,8 @@ function countNestedComments(comments) {
       ? comment.comments
       : Array.isArray(comment?.subComments)
         ? comment.subComments
-        : Array.isArray(comment?.subcomments)
-          ? comment.subcomments
+        : Array.isArray(comment?.subComments)
+          ? comment.subComments
           : []
     total += countNestedComments(nested)
   }
@@ -187,10 +187,10 @@ export async function getSubmissionComments(req, res, next) {
     }
 
     // Chỉ cho xem nếu đã nộp bài hoặc là chủ bài
-    const isOwner = String(submission.userId) === String(userId)
+    const isOwner = String(topic.createdBy) === String(userId)
     if (!isOwner) {
       const hasSubmitted = topic.submissions.some(s => String(s.userId) === String(userId))
-      if (!hasSubmitted) {
+      if (!hasSubmitted && submission.status === 'Đã hoàn thành') {
         return res.status(403).json({ error: 'Bạn cần nộp bài trước khi xem bình luận.' })
       }
     }
@@ -311,7 +311,7 @@ export async function listTopicSubmissions(req, res, next) {
 
   try {
     const topic = await Topic.findById(topicId)
-      .select('title status submissions')
+      .select('title status submissions createdBy')
       .lean()
 
     if (!topic) {
@@ -323,9 +323,10 @@ export async function listTopicSubmissions(req, res, next) {
       ? topic.submissions.some((submission) =>
         submission.userId && submission.userId.toString() === userId
       )
-      : false
-
-    if (!hasSubmitted) {
+      : 
+    console.log("Topic: ", topic)
+    console.log(String(topic.createdBy), String(userId))
+    if (!hasSubmitted && topic.status !== 'Đã hoàn thành' && String(topic.createdBy) !== String(userId)) {
       const user = await User.findById(userObjectId).select('rank').lean()
       if (!user) {
         return res.status(404).json({ error: 'Không tìm thấy người dùng.' })

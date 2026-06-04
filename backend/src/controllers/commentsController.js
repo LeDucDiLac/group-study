@@ -21,10 +21,10 @@ export async function createComment(req, res) {
     if (!submission) return res.status(404).json({ error: 'Bài nộp không tồn tại' })
     const parentComment = submission.comments.id(commentId)
     if (!parentComment) return res.status(404).json({ error: 'Bình luận không tồn tại' })
-    parentComment.subcomments.push({ content, userId })
+    parentComment.subComments.push({ content, userId })
     await topic.save()
     await addPointsForTopicComment({ topicOwnerId: topic.createdBy, actorId: userId })
-    const newSubComment = parentComment.subcomments[parentComment.subcomments.length - 1]
+    const newSubComment = parentComment.subComments[parentComment.subComments.length - 1]
     await createCommentNotifications({ userId, commentId: String(newSubComment._id), content })
     return res.json({ comment: newSubComment })
   } else {

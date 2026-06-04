@@ -15,6 +15,7 @@ export const topicFallback = (id: string): Topic =>
     status: 'Đang mở',
     createdBy: '',
     proposalReason: '',
+    approvedBy: '',
     windowHours: 48,
     submissionCount: 0,
     likeCount: 0,
@@ -91,6 +92,13 @@ export const topicService = {
   /** GET /api/topics/participated — chỉ các topic user đã tham gia */
   getParticipatedTopics: async (): Promise<Topic[]> => {
     const topics = await apiRequest<Topic[]>('/api/topics/participated');
+    topics.forEach(t => topicCache.set(t._id, t));
+    return topics;
+  },
+
+  /** GET /api/topics/my-topics — các topic user đã tạo */
+  getMyTopics: async (): Promise<Topic[]> => {
+    const topics = await apiRequest<Topic[]>('/api/topics/my-topics');
     topics.forEach(t => topicCache.set(t._id, t));
     return topics;
   },

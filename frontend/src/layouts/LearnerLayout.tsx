@@ -8,11 +8,12 @@ import { cn } from '@/utils/format'
 import { useAsync } from '@/utils/hooks'
 
 const nav = [
-  { to: '/topics', label: 'Chủ đề' },
-  { to: '/topics/new', label: 'Tạo chủ đề' },
-  { to: '/calendar', label: 'Lịch học' },
-  { to: '/bookmarks', label: 'Đã lưu' },
-  { to: '/notifications', label: 'Thông báo' },
+  { to: '/topics', label: 'Chủ đề', end: true },
+  { to: '/topics/new', label: 'Tạo chủ đề', end: true },
+  { to: '/topics/my', label: 'Quản lý', end: false },
+  { to: '/calendar', label: 'Lịch học', end: false },
+  { to: '/bookmarks', label: 'Đã lưu', end: false },
+  { to: '/notifications', label: 'Thông báo', end: false },
 ]
 
 const fallbackLearner: User = {
@@ -53,6 +54,7 @@ export function LearnerLayout() {
               <NavLink
                 key={item.to}
                 to={item.to}
+                end={item.end}
                 className={({ isActive }) =>
                   `rounded-md px-3 py-2 text-sm font-semibold transition whitespace-nowrap ${isActive ? 'bg-secondary-fixed text-secondary-container' : 'text-ink-muted hover:bg-surface-low hover:text-ink'
                   }`
@@ -123,6 +125,7 @@ export function LearnerLayout() {
             <NavLink
               key={item.to}
               to={item.to}
+              end={item.end}
               onClick={() => setMobileMenuOpen(false)}
               className={({ isActive }) =>
                 `rounded-md px-4 py-3 text-sm font-semibold transition ${isActive ? 'bg-secondary-fixed text-secondary-container' : 'text-ink-muted hover:bg-surface-low hover:text-ink'

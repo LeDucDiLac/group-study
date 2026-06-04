@@ -14,7 +14,7 @@ import {
   Textarea,
 } from '@/components/ui'
 import { ResourceList, TopicCard, TopicStatusBadge } from '@/components/topic/TopicCard'
-import { topicFallback, topicService, uploadService } from '@/services/api'
+import { authService, topicFallback, topicService, uploadService } from '@/services/api'
 import type { Topic, TopicStatus, ResourceFile } from '@/types/domain'
 import { cn, formatDate } from '@/utils/format'
 import { useAsync } from '@/utils/hooks'
@@ -172,8 +172,14 @@ export function TopicDetailPage() {
   const { id = 't1' } = useParams()
   const navigate = useNavigate()
   const { data: topic } = useAsync(() => topicService.getTopicById(id), topicFallback(id), [id])
+  const { data: currentUser } = useAsync(() => authService.getSessionUser(), null)
   const [participating, setParticipating] = useState(false)
   const mySubmission = topic.mySubmission
+
+  // Kiểm tra user có phải chủ topic không
+  const creatorId = typeof topic.createdBy === 'object' ? topic.createdBy._id : topic.createdBy
+  const isOwner = !!currentUser && !!creatorId && currentUser.id === String(creatorId)
+
   const expired = topic.status === 'Đang mở' && Boolean(topic.closesAt) && new Date(topic.closesAt as string).getTime() <= Date.now()
   const disabled = topic.status !== 'Đang mở' || expired
   const statusCopy =
@@ -261,12 +267,17 @@ export function TopicDetailPage() {
             </div>
           </div>
           <div className="mt-5 grid gap-2">
+            {isOwner && topic.status === 'Đang mở' ? (
+              <>
+                <Badge tone="info">Bạn người tạo chủ đề này</Badge>
+                <ActionLink to={`/topics/${topic._id}/peer`} variant="primary">
+                  Vào dạy chéo
+                </ActionLink>
+              </>
+            ) : null}
             {mySubmission ? (
               <>
                 <Badge tone="success">Đã nộp bài</Badge>
-                <ActionLink to={`/topics/${topic._id}/my-submission`} variant="primary">
-                  Xem bài của bạn
-                </ActionLink>
                 <ActionLink to={`/topics/${topic._id}/peer`}>Vào dạy chéo</ActionLink>
               </>
             ) : (
@@ -889,7 +900,7 @@ export function CreateTopicPage() {
                 <div className="grid gap-2">
                   <p className="text-xs font-bold text-ink-muted">Danh sách tài liệu đã thêm:</p>
                   {uploadedResources.map((file, idx) => (
-                    <div key={file.id || idx} className="flex items-center justify-between rounded-md border border-border-subtle bg-white px-3 py-2 text-sm shadow-sm">
+                    <div key={file.url || idx} className="flex items-center justify-between rounded-md border border-border-subtle bg-white px-3 py-2 text-sm shadow-sm">
                       <span className="inline-flex min-w-0 items-center gap-2 font-semibold text-ink">
                         <Icon name={file.type === 'link' ? 'link' : 'file'} size={16} />
                         <span className="truncate">{file.label}</span>
@@ -948,7 +959,7 @@ export function CreateTopicPage() {
             <h4 className="mt-3 line-clamp-2 text-lg font-extrabold leading-snug text-primary-container">{title || 'Tên chủ đề'}</h4>
             <p className="mt-2 line-clamp-3 text-sm leading-6 text-ink-muted">{description || 'Mô tả ngắn về mục tiêu học.'}</p>
             <div className="mt-3 flex flex-wrap gap-2">
-              {tags.length ? tags.map((tag) => <Badge key={tag}>{tag}</Badge>) : (uploadedResources.length ? uploadedResources.map((res) => <Badge key={res.id}>{res.label}</Badge>) : <Badge>Chưa có tag</Badge>)}
+              {tags.length ? tags.map((tag) => <Badge key={tag}>{tag}</Badge>) : (uploadedResources.length ? uploadedResources.map((res) => <Badge key={res.url}>{res.label}</Badge>) : <Badge>Chưa có tag</Badge>)}
             </div>
           </div>
         </Card>
@@ -1049,6 +1060,84 @@ export function TopicPendingPage() {
           </ActionLink>
         </div>
       </Card>
+    </div>
+  )
+}
+
+export function MyTopicsPage() {
+  const { data: topics, loading } = useAsync(() => topicService.getMyTopics(), [])
+
+  const statusOrder: Record<string, number> = {
+    'Đang mở': 0,
+    'Chưa duyệt': 1,
+    'Đã hoàn thành': 2,
+    'Bị từ chối': 3,
+  }
+  const sorted = [...topics].sort((a, b) => (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9))
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-md border border-border-subtle bg-white px-5 py-5 shadow-card">
+        <Badge tone="brand">Của tôi</Badge>
+        <h1 className="mt-3 text-[30px] font-extrabold leading-tight text-primary-container sm:text-[34px]">
+          Chủ đề tôi đã tạo
+        </h1>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-muted sm:text-base">
+          Danh sách các chủ đề bạn đã đề xuất, đang mở hoặc đã hoàn thành.
+        </p>
+      </div>
+
+      {loading ? (
+        <div className="grid gap-4">
+          {[0, 1, 2].map(i => (
+            <Card key={i} className="h-24 animate-pulse bg-surface-low p-5">{' '}</Card>
+          ))}
+        </div>
+      ) : sorted.length ? (
+        <div className="grid gap-4">
+          {sorted.map(topic => (
+            <Card key={topic._id} className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <TopicStatusBadge status={topic.status} />
+                  <Badge tone="info">{topic.category}</Badge>
+                </div>
+                <p className="mt-2 truncate text-base font-extrabold text-primary-container">{topic.title}</p>
+                <p className="mt-1 line-clamp-1 text-sm text-ink-muted">{topic.description}</p>
+                <div className="mt-2 flex flex-wrap gap-3 text-xs font-semibold text-ink-subtle">
+                  <span>{topic.submissionCount} bài nộp</span>
+                  <span>{topic.windowHours} giờ</span>
+                  <span>{formatDate(topic.createdAt)}</span>
+                </div>
+              </div>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                {topic.status === 'Bị từ chối' && (
+                  <ActionLink to={`/topics/${topic._id}/edit`} variant="primary">
+                    Chỉnh sửa
+                  </ActionLink>
+                )}
+                {topic.status === 'Chưa duyệt' && (
+                  <ActionLink to={`/topics/${topic._id}/pending`}>
+                    Xem trạng thái
+                  </ActionLink>
+                )}
+                {(topic.status === 'Đang mở' || topic.status === 'Đã hoàn thành') && (
+                  <ActionLink to={`/topics/${topic._id}`}>
+                    Xem chủ đề
+                  </ActionLink>
+                )}
+              </div>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <EmptyState
+          title="Bạn chưa tạo chủ đề nào"
+          description="Hãy đề xuất chủ đề đầu tiên để cộng đồng cùng học."
+          actionLabel="Tạo chủ đề"
+          to="/topics/new"
+        />
+      )}
     </div>
   )
 }

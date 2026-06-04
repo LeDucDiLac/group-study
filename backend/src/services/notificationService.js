@@ -18,10 +18,6 @@ function toObjectId(value, fieldName) {
 }
 
 function getNestedComments(comment) {
-  if (Array.isArray(comment?.comments)) {
-    return comment.comments
-  }
-
   if (Array.isArray(comment?.subComments)) {
     return comment.subComments
   }

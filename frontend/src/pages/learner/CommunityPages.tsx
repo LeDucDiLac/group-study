@@ -14,6 +14,7 @@ import {
   topicService,
   userFallback,
 } from '@/services/api'
+import type { BookmarkItem } from '@/services/bookmarks'
 import type { Comment, Deadline, Notification, ProfileStats, Submission, Topic, User } from '@/types/domain'
 import { RANK_LABELS, getRankTier } from '@/utils/badges'
 import { formatDateTime } from '@/utils/format'
@@ -42,8 +43,14 @@ export function PeerLearningPage() {
   const [sortBy, setSortBy] = useState('engagement')
   const { data: topic, loading: checkingAccess } = useAsync(() => topicService.getTopicById(id), topicFallback(id), [id])
   const mySubmission = topic.mySubmission
+  const { data: currentUser } = useAsync(() => authService.getSessionUser(), null)
   const { data: submissions, loading } = useAsync(() => submissionService.getSubmissionsByTopic(id), [], [id])
-  const accessDenied = !checkingAccess && !mySubmission
+
+  // Chủ topic được phép xem dạy chéo mà không cần nộp bài
+  const creatorId = typeof topic.createdBy === 'object' ? (topic.createdBy as any)._id : topic.createdBy
+  const isOwner = !!currentUser && !!creatorId && currentUser.id === String(creatorId)
+
+  const accessDenied = !checkingAccess && !mySubmission && !isOwner
 
   const sortedSubmissions = [...submissions].sort((a, b) => {
     if (sortBy === 'newest') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -65,7 +72,7 @@ export function PeerLearningPage() {
 
   return (
     <div className="mx-auto max-w-[1160px]">
-      <PeerPageHeader topicTitle={topic.title} />
+      <PeerPageHeader topic={topic} />
       <SortBar count={submissions.length} sortBy={sortBy} onSortChange={setSortBy} />
       {mySubmission && <MySubmissionBlock submission={mySubmission} />}
       <div className="mt-5 grid gap-4">
@@ -125,12 +132,16 @@ function MySubmissionBlock({ submission }: { submission: Submission }) {
               <div className="mt-3 flex flex-wrap gap-2">
                 {submission.resources.map((file) => (
                   <div
-                    key={file.id}
+                    key={file.label}
                     className="cursor-pointer rounded border border-border-subtle bg-white px-3 py-1.5 text-sm font-semibold text-ink-subtle hover:bg-surface-low"
                     onClick={() => {
                       if (!file.url) return
                       const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001'
-                      window.open(baseUrl + file.url, '_blank')
+                      if (file.type === 'link') {
+                        window.open(file.url, '_blank')
+                      } else {
+                        window.open(baseUrl + file.url, '_blank')
+                      }
                     }}
                   >
                     {file.label}
@@ -150,16 +161,42 @@ function MySubmissionBlock({ submission }: { submission: Submission }) {
   )
 }
 
-function PeerPageHeader({ topicTitle }: { topicTitle: string }) {
+function PeerPageHeader({ topic }: { topic: Topic }) {
   return (
     <div className="rounded-md border border-border-subtle bg-white p-6 shadow-card">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <h1 className="text-[34px] font-extrabold leading-tight text-primary-container">Dạy chéo</h1>
-          <p className="mt-2 text-base font-semibold text-ink-muted">{topicTitle}</p>
+          <h1 className="text-[34px] font-extrabold leading-tight text-primary-container">{topic.title}</h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-ink-muted">
             Xem cách người khác giải thích lại kiến thức sau khi bạn đã hoàn thành bài của mình.
           </p>
+          {/* Hiển thị thông tin của chủ đề, bao gồm mô tả và tài liệu đính kèm */}
+          <h3 className="mt-5 text-lg font-extrabold text-primary-container">Mô tả chủ đề</h3>
+          <p className="mt-2 text-sm text-ink-muted">{topic.description}</p>
+          {topic.resources.length > 0 && (
+            <div className="mt-4">
+              <h3 className="text-lg font-extrabold text-primary-container">Tài liệu đính kèm</h3>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {topic.resources.map((file) => (
+                  <div
+                    key={file.label}
+                    className="cursor-pointer rounded border border-border-subtle bg-white px-3 py-1.5 text-sm font-semibold text-ink-subtle hover:bg-surface-low"
+                    onClick={() => {
+                      if (!file.url) return
+                      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+                      if (file.type === 'link') {
+                        window.open(file.url, '_blank')
+                      } else {
+                        window.open(baseUrl + file.url, '_blank')
+                      }
+                    }}
+                  >
+                    {file.label}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         <Badge tone="success">Đã nộp bài</Badge>
       </div>
@@ -365,21 +402,24 @@ export function PeerDetailPage() {
   const submission = submissions.find(s => s._id === submissionId) ?? null
   const author = userFallback(submission?.user?.id ?? 'u2')
   const topic = topicFallback(id)
-  const [saved, setSaved] = useState(false)
+  const { data: bookmarks, setData: setBookmarks } = useAsync(() => bookmarkService.getBookmarks(), [])
   const [bookmarkPending, setBookmarkPending] = useState(false)
 
-  useEffect(() => {
-    setSaved(Boolean(submission?.saved))
-  }, [submission?._id, submission?.saved])
+  const saved = submission ? bookmarkService.isBookmarked(bookmarks, submission._id) : false
 
   async function toggleBookmark() {
     if (!submission || bookmarkPending) return
     setBookmarkPending(true)
     try {
-      const result = await bookmarkService.toggleBookmark(submission._id)
-      setSaved(result.saved)
-    } catch {
-      setSaved(saved)
+      const result = await bookmarkService.toggleBookmark(submission._id, bookmarks)
+      if (result.saved && result.item) {
+        setBookmarks(prev => [...prev, result.item!])
+      } else {
+        setBookmarks(prev => prev.filter(b => !bookmarkService.isBookmarked([b], submission._id) || !result.saved === false))
+        // Re-fetch để đồng bộ
+        const updated = await bookmarkService.getBookmarks()
+        setBookmarks(updated)
+      }
     } finally {
       setBookmarkPending(false)
     }
@@ -436,7 +476,6 @@ export function PeerDetailPage() {
 
 type ThreadComment = Comment & {
   author: User
-  role: 'Người học' | 'Dẫn Lối Tri Thức' | 'Bậc Thầy Cộng Đồng'
   replies: ThreadComment[]
 }
 
@@ -694,11 +733,6 @@ function CommentItem({
   )
 }
 
-function RoleBadge({ role }: { role: ThreadComment['role'] }) {
-  const tone = role === 'Bậc Thầy Cộng Đồng' ? 'brand' : role === 'Dẫn Lối Tri Thức' ? 'success' : 'neutral'
-  return <Badge tone={tone}>{role}</Badge>
-}
-
 function CommentSkeleton() {
   return (
     <div className="grid gap-3">
@@ -897,13 +931,6 @@ function NotificationCard({ notification }: { notification: Notification }) {
           >
             {primaryAction.label}
           </Link>
-          <Link
-            to={`/notifications/${notification.id}`}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-ink-subtle transition hover:bg-surface-low hover:text-ink"
-            aria-label="Mở tùy chọn thông báo"
-          >
-            <Icon name="more" size={17} />
-          </Link>
         </div>
       </div>
     </Card>
@@ -955,11 +982,29 @@ function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate())
 }
 
-function getPrimaryNotificationAction(notification: Notification) {
-  if (notification.type === 'comment') return { label: 'Xem bình luận', to: notification.actionTo }
-  if (notification.type === 'rejected') return { label: 'Chỉnh sửa lại', to: notification.actionTo }
-  if (notification.type === 'deadline') return { label: notification.actionLabel || 'Vào học', to: notification.actionTo }
-  return { label: notification.actionLabel || 'Xem chủ đề', to: notification.actionTo }
+function getPrimaryNotificationAction(notification: Notification): { label: string; to: string } {
+  const link = getNotificationLink(notification)
+  if (notification.type === 'comment') return { label: 'Xem bình luận', to: link }
+  if (notification.type === 'rejected') return { label: 'Chỉnh sửa lại', to: link }
+  if (notification.type === 'approved') return { label: 'Xem chủ đề', to: link }
+  if (notification.type === 'deadline') return { label: 'Vào học', to: link }
+  return { label: 'Xem', to: link }
+}
+
+/** Tạo URL redirect dựa trên target từ backend */
+function getNotificationLink(notification: Notification): string {
+  const t = notification.target
+  if (!t) return '/notifications'
+  if (t.submissionId && t.topicId && (notification.type === 'comment')) {
+    return `/topics/${t.topicId}/peer/${t.submissionId}`
+  }
+  if (t.topicId && notification.type === 'rejected') {
+    return `/topics/${t.topicId}/edit`
+  }
+  if (t.topicId) {
+    return `/topics/${t.topicId}`
+  }
+  return '/notifications'
 }
 
 function getNotificationActionStyle(type: Notification['type']) {
@@ -1018,33 +1063,17 @@ function getNotificationConfig(type: Notification['type']) {
       cardClass: 'border-border-subtle bg-white',
       unreadClass: 'bg-surface-low/60',
     },
+    system: {
+      label: 'Hệ thống',
+      icon: 'spark',
+      tone: 'info',
+      iconClass: 'bg-secondary-fixed text-secondary-container',
+      cardClass: 'border-border-subtle bg-white',
+      unreadClass: 'bg-secondary-fixed/30',
+    },
   }
-  return configs[type] ?? configs.comment
+  return configs[type] ?? configs.system
 }
-export function NotificationDetailPage() {
-  const { id = 'n1' } = useParams()
-  const { data: notification } = useAsync(() => notificationService.getNotification(id), undefined as never, [id])
-  if (!notification) return null
-  const config = getNotificationConfig(notification.type)
-  return (
-    <Card className="mx-auto max-w-3xl p-7">
-      <div className="flex items-center gap-3">
-        <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-md ${config.iconClass}`}>
-          <Icon name={config.icon} size={22} />
-        </span>
-        <div>
-          <Badge tone={config.tone}>{config.label}</Badge>
-          <p className="mt-1 text-xs font-semibold text-ink-subtle">Chi tiết thông báo</p>
-        </div>
-      </div>
-      <h1 className="mt-5 text-3xl font-extrabold text-primary-container">{notification.title}</h1>
-      <p className="mt-3 text-ink-muted">{notification.description}</p>
-      <p className="mt-2 text-sm text-ink-subtle">{formatDateTime(notification.createdAt)}</p>
-      <div className="mt-6"><ActionLink to={notification.actionTo} variant="primary">{notification.actionLabel}</ActionLink></div>
-    </Card>
-  )
-}
-
 export function CalendarPage() {
   const { data: topics } = useAsync(() => topicService.getParticipatedTopics(), [])
   const deadlines: Deadline[] = topics
@@ -1229,24 +1258,36 @@ export function BookmarkPage() {
     setBookmarks((current) => current.filter((b) => b._id !== bookmarkId))
   }
 
+  function getBookmarkLink(b: BookmarkItem): string {
+    const { topicId, submissionId, commentId } = b.target
+    if ((commentId || b.target.subCommentId) && submissionId && topicId)
+      return `/topics/${topicId}/peer/${submissionId}`
+    if (submissionId && topicId) return `/topics/${topicId}/peer/${submissionId}`
+    if (topicId) return `/topics/${topicId}`
+    return '/bookmarks'
+  }
+
+  function getBookmarkLabel(type: string): string {
+    if (type === 'subcomment') return 'Phản hồi đã lưu'
+    if (type === 'comment') return 'Bình luận đã lưu'
+    if (type === 'submission') return 'Bài nộp đã lưu'
+    return 'Chủ đề đã lưu'
+  }
+
   return (
     <div>
-      <PageHeader title="Bookmark / Bài đã lưu" description="Những bài giải thích hay được lưu lại từ khu vực dạy chéo." />
+      <PageHeader title="Bookmark / Đã lưu" description="Những nội dung hay được lưu lại từ khu vực dạy chéo." />
       <div className="mt-6 grid gap-4">
         {bookmarks.length ? (
           bookmarks.map((bookmark) => (
             <Card key={bookmark._id} className="flex items-center justify-between gap-4 p-4">
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-ink-muted">
-                  Bài nộp đã lưu
-                </p>
+                <p className="text-sm font-semibold text-ink-muted">{getBookmarkLabel(bookmark.type)}</p>
                 <Link
-                  to={bookmark.target.topicId && bookmark.target.submissionId
-                    ? `/topics/${bookmark.target.topicId}/peer/${bookmark.target.submissionId}`
-                    : '#'}
+                  to={getBookmarkLink(bookmark)}
                   className="mt-1 block text-sm font-bold text-secondary-container hover:underline truncate"
                 >
-                  Xem bài nộp →
+                  Xem nội dung →
                 </Link>
                 <p className="mt-1 text-xs text-ink-subtle">{formatDateTime(bookmark.createdAt)}</p>
               </div>
@@ -1256,7 +1297,7 @@ export function BookmarkPage() {
             </Card>
           ))
         ) : (
-          <EmptyState title="Chưa có bài đã lưu" description="Khi thấy một bài hay trong dạy chéo, hãy lưu lại để xem sau." />
+          <EmptyState title="Chưa có nội dung đã lưu" description="Khi thấy bài hay trong dạy chéo, hãy lưu lại để xem sau." />
         )}
       </div>
     </div>

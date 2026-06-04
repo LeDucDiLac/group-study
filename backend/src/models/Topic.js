@@ -26,7 +26,7 @@ const commentSchema = new Schema(
       type: reactionSchema,
       default: () => ({ like: [], dislike: [] }),
     },
-    subcomments: [],
+    subComments: [],
     createdAt: {
       type: Date,
       default: Date.now,
@@ -35,7 +35,7 @@ const commentSchema = new Schema(
   { _id: true }
 )
 
-commentSchema.add({ subcomments: [commentSchema] })
+commentSchema.add({ subComments: [commentSchema] })
 
 const topicResourceSchema = new Schema(
   {
@@ -199,14 +199,14 @@ topicSchema.statics.findTargetById = async function findTargetById(id) {
   const subCommentMatch = await this.aggregate([
     { $unwind: '$submissions' },
     { $unwind: '$submissions.comments' },
-    { $unwind: '$submissions.comments.subcomments' },
-    { $match: { 'submissions.comments.subcomments._id': normalizedId } },
+    { $unwind: '$submissions.comments.subComments' },
+    { $match: { 'submissions.comments.subComments._id': normalizedId } },
     {
       $project: {
         topicId: '$_id',
         submissionId: '$submissions._id',
         commentId: '$submissions.comments._id',
-        subCommentId: '$submissions.comments.subcomments._id',
+        subCommentId: '$submissions.comments.subComments._id',
       },
     },
   ])

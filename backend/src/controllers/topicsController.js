@@ -39,7 +39,7 @@ export async function listTopicsController(req, res) {
 export async function createTopic(req, res) {
   const user_id = String(req.user._id)
   const rank = req.user.rank
-  const { title, description, category, tags, resources, proposalReason } = req.body || {}
+  const { title, description, category, tags, resources, proposalReason, windowHours } = req.body || {}
   if (!title || !description || !category || !proposalReason) {
     return res.status(400).json({ error: 'Thiếu thông tin bắt buộc' })
   }
@@ -51,6 +51,7 @@ export async function createTopic(req, res) {
     tags,
     resources,
     proposalReason,
+    windowHours,
     createdBy: req.user._id,
   })
   const shouldAutoApprove = rank >= 700
@@ -288,6 +289,41 @@ export async function participateTopic(req, res) {
     await topic.save()
     const entry = topic.Participation.find(p => String(p.userId) === userId)
     return res.json({ ok: true, startedAt: entry?.startedAt ?? null })
+  } catch (error) {
+    return res.status(500).json({ error: 'Lỗi server' })
+  }
+}
+
+export async function myTopicsController(req, res) {
+  const userId = String(req.user._id)
+  try {
+    const topics = await Topic.find({ createdBy: req.user._id })
+      .populate('createdBy', 'displayName rank')
+      .lean()
+    const result = topics.map(topic => {
+      const likeCount = topic.reactions?.like?.length || 0
+      const dislikeCount = topic.reactions?.dislike?.length || 0
+      const liked = topic.reactions?.like?.some(id => String(id) === userId) ? 1
+        : topic.reactions?.dislike?.some(id => String(id) === userId) ? -1 : 0
+      const submissionCount = topic.submissions?.length || 0
+      const participationCount = topic.Participation?.length || 0
+      const participationStartTime = topic.Participation?.find(p => String(p.userId) === userId)?.startedAt ?? null
+      const mySubmission = topic.submissions?.find(s => String(s.userId) === userId) ?? null
+
+      const { Participation, submissions, reactions, ...rest } = topic
+      return {
+        ...rest,
+        id: String(topic._id),
+        likeCount,
+        dislikeCount,
+        liked,
+        submissionCount,
+        participationCount,
+        participationStartTime,
+        mySubmission,
+      }
+    })
+    return res.json(result)
   } catch (error) {
     return res.status(500).json({ error: 'Lỗi server' })
   }

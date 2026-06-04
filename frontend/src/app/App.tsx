@@ -5,9 +5,9 @@ import { AdminLayout } from '@/layouts/AdminLayout'
 import { LearnerLayout } from '@/layouts/LearnerLayout'
 import { PublicLayout } from '@/layouts/PublicLayout'
 import { AdminPage, AdminRedirect } from '@/pages/admin/AdminPages'
-import { BookmarkPage, CalendarPage, CommunityInsightPage, NotificationDetailPage, NotificationsPage, PeerDetailPage, PeerLearningPage, ProfilePage } from '@/pages/learner/CommunityPages'
-import { LearnPage, MySubmissionPage } from '@/pages/learner/LearnPages'
-import { CreateTopicPage, TopicDetailPage, TopicPendingPage, TopicsPage } from '@/pages/learner/TopicPages'
+import { BookmarkPage, CalendarPage, CommunityInsightPage, NotificationsPage, PeerDetailPage, PeerLearningPage, ProfilePage } from '@/pages/learner/CommunityPages'
+import { LearnPage } from '@/pages/learner/LearnPages'
+import { CreateTopicPage, MyTopicsPage, TopicDetailPage, TopicPendingPage, TopicsPage } from '@/pages/learner/TopicPages'
 import { ForgotPasswordPage, LandingPage, LoginPage, PublicTopicsPage } from '@/pages/public/PublicPages'
 import { authService } from '@/services/api'
 import type { User } from '@/types/domain'
@@ -25,16 +25,15 @@ export function App() {
       <Route element={<RequireAuth><LearnerLayout /></RequireAuth>}>
         <Route path="/topics" element={<TopicsPage />} />
         <Route path="/topics/new" element={<CreateTopicPage />} />
+        <Route path="/topics/my" element={<MyTopicsPage />} />
         <Route path="/topics/:id/edit" element={<CreateTopicPage />} />
         <Route path="/topics/:id" element={<TopicDetailPage />} />
         <Route path="/topics/:id/pending" element={<TopicPendingPage />} />
         <Route path="/topics/:id/learn" element={<LearnPage />} />
-        <Route path="/topics/:id/my-submission" element={<MySubmissionPage />} />
         <Route path="/topics/:id/peer" element={<PeerLearningPage />} />
         <Route path="/topics/:id/peer/:submissionId" element={<PeerDetailPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
-        <Route path="/notifications/:id" element={<NotificationDetailPage />} />
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/bookmarks" element={<BookmarkPage />} />
         <Route path="/insights" element={<CommunityInsightPage />} />

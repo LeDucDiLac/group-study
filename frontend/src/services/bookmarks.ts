@@ -1,9 +1,19 @@
 import { apiRequest } from './api';
 
+export interface BookmarkTarget {
+  topicId?: string;
+  submissionId?: string;
+  commentId?: string;
+  subCommentId?: string;
+}
+
+export type BookmarkType = 'topic' | 'submission' | 'comment' | 'subcomment';
+
 export interface BookmarkItem {
   _id: string;
-  type: string;
-  target: { submissionId?: string; topicId?: string };
+  type: BookmarkType;
+  target: BookmarkTarget;
+  note?: string;
   createdAt: string;
 }
 
@@ -18,12 +28,17 @@ export const bookmarkService = {
     }
   },
 
-  /** POST /api/bookmarks */
-  createBookmark: async (submissionId: string, topicId?: string): Promise<BookmarkItem> => {
-    return apiRequest<BookmarkItem>('/api/bookmarks', {
+  /**
+   * POST /api/bookmarks
+   * Chỉ gửi targetId (id của topic/submission/comment/subComment).
+   * Backend dùng findTargetById để resolve target đầy đủ.
+   */
+  createBookmark: async (targetId: string, note?: string): Promise<BookmarkItem> => {
+    const res = await apiRequest<{ item: BookmarkItem }>('/api/bookmarks', {
       method: 'POST',
-      body: JSON.stringify({ target: { submissionId, topicId }, type: 'submission' }),
+      body: JSON.stringify({ targetId, note }),
     });
+    return res.item;
   },
 
   /** DELETE /api/bookmarks/:id */
@@ -31,20 +46,47 @@ export const bookmarkService = {
     return apiRequest<{ ok: boolean }>(`/api/bookmarks/${id}`, { method: 'DELETE' });
   },
 
-  /** Toggle helper — kiểm tra trạng thái rồi tạo/xóa bookmark */
-  toggleBookmark: async (submissionId: string, topicId?: string): Promise<{ submissionId: string; saved: boolean }> => {
-    try {
-      const items = await bookmarkService.getBookmarks();
-      const existing = items.find(item => item.target.submissionId === submissionId);
-      if (existing) {
-        await bookmarkService.deleteBookmark(existing._id);
-        return { submissionId, saved: false };
-      } else {
-        await bookmarkService.createBookmark(submissionId, topicId);
-        return { submissionId, saved: true };
-      }
-    } catch {
-      return { submissionId, saved: false };
+  /**
+   * Toggle bookmark theo targetId.
+   * Nếu đã có bookmark với submissionId/commentId/subCommentId trùng thì xóa, ngược lại tạo mới.
+   */
+  toggleBookmark: async (
+    targetId: string,
+    existingBookmarks: BookmarkItem[],
+  ): Promise<{ saved: boolean; item?: BookmarkItem }> => {
+    // Tìm bookmark đã tồn tại dựa trên targetId khớp với bất kỳ target field nào
+    const existing = existingBookmarks.find(b =>
+      String(b.target.subCommentId) === targetId ||
+      String(b.target.commentId) === targetId ||
+      String(b.target.submissionId) === targetId ||
+      String(b.target.topicId) === targetId
+    );
+    if (existing) {
+      await bookmarkService.deleteBookmark(existing._id);
+      return { saved: false };
+    } else {
+      const item = await bookmarkService.createBookmark(targetId);
+      return { saved: true, item };
     }
+  },
+
+  /** Kiểm tra targetId đã được bookmark chưa */
+  isBookmarked: (bookmarks: BookmarkItem[], targetId: string): boolean => {
+    return bookmarks.some(b =>
+      String(b.target.subCommentId) === targetId ||
+      String(b.target.commentId) === targetId ||
+      String(b.target.submissionId) === targetId ||
+      String(b.target.topicId) === targetId
+    );
+  },
+
+  /** Lấy bookmark id của targetId */
+  getBookmarkId: (bookmarks: BookmarkItem[], targetId: string): string | undefined => {
+    return bookmarks.find(b =>
+      String(b.target.subCommentId) === targetId ||
+      String(b.target.commentId) === targetId ||
+      String(b.target.submissionId) === targetId ||
+      String(b.target.topicId) === targetId
+    )?._id;
   },
 };

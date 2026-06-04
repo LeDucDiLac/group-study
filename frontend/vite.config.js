@@ -14,9 +14,10 @@ export default defineConfig({
     proxy: {
       // Proxy API calls đến json-server
       '/api': {
-        target: 'http://localhost:3001',
+        target: 'https://dreadlock-tidiness-earring.ngrok-free.dev ',
         changeOrigin: true,
       },
     },
+    allowedHosts: 
   },
 })

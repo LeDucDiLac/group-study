@@ -14,8 +14,7 @@ export function flattenComments(dbComments: any[], parentId?: string, submission
       createdAt: c.createdAt || new Date().toISOString(),
       parentId,
     });
-    // Schema dùng 'subcomments' (lowercase)
-    const nested = c.subcomments || c.subComments || [];
+    const nested = c.subComments || [];
     if (nested.length > 0) {
       flat = flat.concat(flattenComments(nested, commentId, submissionId));
     }

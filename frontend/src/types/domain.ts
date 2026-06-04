@@ -1,6 +1,6 @@
 export type UserRole = 'learner' | 'admin'
 export type TopicStatus = 'Đang mở' | 'Chưa duyệt' | 'Bị từ chối' | 'Đã hoàn thành'
-export type NotificationType = 'comment' | 'deadline' | 'approved' | 'rejected' | 'closed'
+export type NotificationType = 'comment' | 'deadline' | 'approved' | 'rejected' | 'closed' | 'system'
 
 export interface User {
   id: string
@@ -21,9 +21,8 @@ export interface ProfileStats {
 }
 
 export interface ResourceFile {
-  id: string;
   label: string;
-  type: 'pdf' | 'image' | 'markdown' | 'txt' | 'docx' | 'link';
+  type: 'link' | 'file' | 'pdf' | 'image' | 'markdown' | 'txt' | 'docx';
   url: string;
   size?: string;
 }
@@ -77,13 +76,19 @@ export interface Comment {
   createdAt: string
 }
 
+export interface NotificationTarget {
+  topicId?: string
+  submissionId?: string
+  commentId?: string
+  subCommentId?: string
+}
+
 export interface Notification {
   id: string
   type: NotificationType
   title: string
   description: string
-  actionLabel: string
-  actionTo: string
+  target?: NotificationTarget
   read: boolean
   createdAt: string
 }
