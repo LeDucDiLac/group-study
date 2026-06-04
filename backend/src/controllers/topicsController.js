@@ -1,30 +1,39 @@
-import mongoose from 'mongoose'
+import mongoose, { deleteModel } from 'mongoose'
 import { addPointsForTopicApproved } from '../services/rankService.js'
-import Topic from '../models/Topic.js'
+import Topic, { listTopics } from '../models/Topic.js'
 import { createSystemNotification } from '../services/notificationService.js'
-
-export async function listTopics(req, res) {
+import { publicInfo } from '../models/User.js'
+export async function listTopicsController(req, res) {
   const { page = 1, limit = 10 } = req.query
-  const topics = await Topic.listTopics({}, { page, limit })
+  const topics = await listTopics({}, { page, limit }).lean()
   // Chuyển trường reactions.like, reactions.dislike, submission, participation thành các trường ảo likeCount, dislikeCount, liked (-1 cho disliked, 0 cho không reaction, 1 cho liked), submissionCount, participationCount, hasParticipated (boolean)
-  const transformed = topics.map(topic => {
-      const likeCount = topic.reactions?.like?.length || 0
-      const dislikeCount = topic.reactions?.dislike?.length || 0
-      const liked = topic.reactions?.like?.includes(req.user?._id) ? 1 : (topic.reactions?.dislike?.includes(req.user?._id) ? -1 : 0)
-      const submissionCount = topic.submissions?.length || 0
-      const participationCount = topic.Participation?.length || 0
-      const hasParticipated = req.user ? topic.Participation?.some(p => String(p.userId) === String(req.user._id)) : false
-      return {
-        ...topic.toObject(),
-        likeCount,
-        dislikeCount,
-        liked,
-        submissionCount,
-        participationCount,
-        hasParticipated,
-      }
-    })
-    res.json(transformed)
+  const transformed = topics.map(async topic => {
+    const likeCount = topic.reactions?.like?.length || 0
+    const dislikeCount = topic.reactions?.dislike?.length || 0
+    const liked = topic.reactions.like.some(id => id.equals(req.user._id)) ? 1 : (topic.reactions.dislike.some(id => id.equals(req.user._id)) ? -1 : 0)
+    const submissionCount = topic.submissions?.length || 0
+    const participationCount = topic.Participation?.length || 0
+    const participationStartTime = topic.Participation?.find(p => String(p.userId) === String(req.user._id))?.startedAt || null
+    const mySubmission = topic.submissions?.find(s => String(s.userId) === String(req.user._id)) || null
+    // Bỏ các trường Participation, submissions, reactions
+    delete topic.Participation
+    delete topic.submissions
+    delete topic.reactions
+    // 
+    return {
+      ...topic,
+      id: String(topic._id),   // map _id → id để frontend dùng topic.id
+      status: topic.status,
+      likeCount,
+      dislikeCount,
+      liked,
+      submissionCount,
+      participationCount,
+      participationStartTime,
+      mySubmission,
+    }
+  })
+  res.json(await Promise.all(transformed))
 }
 
 export async function createTopic(req, res) {
@@ -34,7 +43,7 @@ export async function createTopic(req, res) {
   if (!title || !description || !category || !proposalReason) {
     return res.status(400).json({ error: 'Thiếu thông tin bắt buộc' })
   }
-  
+
   const newTopic = new Topic({
     title,
     description,
@@ -68,12 +77,42 @@ export async function getTopic(req, res, next) {
   }
 
   try {
-    const topic = await Topic.findById(id)
+    const topic = await Topic.findById(id).populate('createdBy', 'displayName rank').lean()
     if (!topic) {
       return res.status(404).json({ error: 'Topic không tồn tại' })
     }
 
-    return res.json(topic)
+    const likeCount = topic.reactions?.like?.length || 0
+    const dislikeCount = topic.reactions?.dislike?.length || 0
+    const liked = req.user
+      ? (topic.reactions?.like?.some(uid => String(uid) === String(req.user._id)) ? 1
+        : topic.reactions?.dislike?.some(uid => String(uid) === String(req.user._id)) ? -1 : 0)
+      : 0
+    const submissionCount = topic.submissions?.length || 0
+    const participationCount = topic.Participation?.length || 0
+    const participationStartTime = req.user
+      ? (topic.Participation?.find(p => String(p.userId) === String(req.user._id))?.startedAt ?? null)
+      : null
+    const mySubmission = req.user
+      ? (topic.submissions?.find(s => String(s.userId) === String(req.user._id)) ?? null)
+      : null
+    if (mySubmission) {
+      mySubmission.user = await publicInfo(mySubmission.userId)
+      delete mySubmission.userId
+    }
+    const { Participation, submissions, reactions, ...rest } = topic
+    return res.json({
+      ...rest,
+      id: String(topic._id),
+      status: topic.status,
+      likeCount,
+      dislikeCount,
+      liked,
+      submissionCount,
+      participationCount,
+      participationStartTime,
+      mySubmission,
+    })
   } catch (error) {
     return next(error)
   }
@@ -99,7 +138,7 @@ export async function updateTopic(req, res) {
     topic.category = category
     topic.tags = tags
     topic.resources = resources
-    const updatedTopic = await topic.save()
+    await topic.save()
     return res.json({ ok: true })
   } catch (error) {
     return res.status(500).json({ error: 'Lỗi server' })
@@ -112,10 +151,10 @@ export async function approveTopic(req, res) {
   const role = req.user.role
   if (role !== 'admin')
     return res.status(403).json({ error: 'Chỉ admin mới có quyền duyệt topic' })
-  Topic.findById(id).then(topic => {
+  Topic.findById(id).then(async topic => {
     if (!topic) return res.status(404).json({ error: 'Topic không tồn tại' })
-    if (topic.status !== 'Đang chờ duyệt') {
-      return res.status(400).json({ error: 'Chỉ có thể duyệt các topic đang chờ duyệt' })
+    if (topic.status !== 'Chưa duyệt') {
+      return res.status(400).json({ error: 'Chỉ có thể duyệt các topic chưa duyệt' })
     }
     topic.status = 'Đang mở'
     topic.approvedBy = userId
@@ -140,10 +179,10 @@ export async function rejectTopic(req, res) {
   if (!rejectionReason) {
     return res.status(400).json({ error: 'Thiếu lý do từ chối' })
   }
-  Topic.findById(id).then(topic => {
+  Topic.findById(id).then(async topic => {
     if (!topic) return res.status(404).json({ error: 'Topic không tồn tại' })
-    if (topic.status !== 'Đang chờ duyệt') {
-      return res.status(400).json({ error: 'Chỉ có thể từ chối các topic đang chờ duyệt' })
+    if (topic.status !== 'Chưa duyệt') {
+      return res.status(400).json({ error: 'Chỉ có thể từ chối các topic chưa duyệt' })
     }
     topic.status = 'Bị từ chối'
     topic.rejectionReason = rejectionReason
@@ -185,10 +224,70 @@ export async function markTopicCompleted(req, res) {
 export async function getUnapprovedTopics(req, res) {
   const role = req.user.role
   if (role !== 'admin')
-    return res.status(403).json({ error: 'Chỉ admin mới có quyền xem các topic đang chờ duyệt' })
+    return res.status(403).json({ error: 'Chỉ admin mới có quyền xem các topic chưa duyệt' })
   try {
-    const topics = await Topic.find({ status: 'Chưa duyệt' })
+    const topics = await Topic.find({ status: 'Chưa duyệt' }).populate('createdBy', 'displayName rank')
     return res.json(topics)
+  } catch (error) {
+    return res.status(500).json({ error: 'Lỗi server' })
+  }
+}
+
+export async function getParticipatedTopics(req, res) {
+  const userId = String(req.user._id)
+  try {
+    const topics = await Topic.find({ 'Participation.userId': req.user._id })
+      .populate('createdBy', 'displayName rank')
+      .lean()
+
+    const result = topics.map(topic => {
+      const likeCount = topic.reactions?.like?.length || 0
+      const dislikeCount = topic.reactions?.dislike?.length || 0
+      const liked = topic.reactions?.like?.some(id => String(id) === userId) ? 1
+        : topic.reactions?.dislike?.some(id => String(id) === userId) ? -1 : 0
+      const submissionCount = topic.submissions?.length || 0
+      const participationCount = topic.Participation?.length || 0
+      const participationStartTime = topic.Participation?.find(p => String(p.userId) === userId)?.startedAt ?? null
+      const mySubmission = topic.submissions?.find(s => String(s.userId) === userId) ?? null
+
+      const { Participation, submissions, reactions, ...rest } = topic
+      return {
+        ...rest,
+        id: String(topic._id),
+        likeCount,
+        dislikeCount,
+        liked,
+        submissionCount,
+        participationCount,
+        participationStartTime,
+        mySubmission,
+      }
+    })
+
+    return res.json(result)
+  } catch (error) {
+    return res.status(500).json({ error: 'Lỗi server' })
+  }
+}
+
+export async function participateTopic(req, res) {
+  const { id } = req.params
+  const userId = String(req.user._id)
+  try {
+    const topic = await Topic.findById(id)
+    if (!topic) {
+      return res.status(404).json({ error: 'Topic không tồn tại' })
+    }
+    if (topic.status !== 'Đang mở') {
+      return res.status(400).json({ error: 'Chỉ có thể tham gia các topic đang mở' })
+    }
+    if (topic.Participation.some(p => String(p.userId) === userId)) {
+      return res.status(400).json({ error: 'Bạn đã tham gia topic này' })
+    }
+    topic.Participation.push({ userId, startedAt: Date.now() })
+    await topic.save()
+    const entry = topic.Participation.find(p => String(p.userId) === userId)
+    return res.json({ ok: true, startedAt: entry?.startedAt ?? null })
   } catch (error) {
     return res.status(500).json({ error: 'Lỗi server' })
   }

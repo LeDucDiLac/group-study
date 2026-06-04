@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { Avatar, Badge, Icon } from '@/components/ui'
-import { authService, userService } from '@/services/api'
+import { authService, profileService } from '@/services/api'
 import type { User } from '@/types/domain'
 import { cn } from '@/utils/format'
 import { useAsync } from '@/utils/hooks'
 
 const nav = [
   { to: '/admin/dashboard', label: 'Dashboard' },
-  { to: '/admin/topics/pending', label: 'Chờ duyệt' },
+  { to: '/admin/topics/pending', label: 'Chưa duyệt' },
   { to: '/admin/topics', label: 'Quản lý chủ đề' },
   { to: '/admin/users', label: 'Quản lý người dùng' },
 ]
@@ -16,6 +16,7 @@ const nav = [
 const fallbackAdmin: User = {
   id: 'loading-admin',
   name: 'Admin',
+  displayName: 'Admin',
   email: '',
   role: 'admin',
   status: 'active',
@@ -23,12 +24,12 @@ const fallbackAdmin: User = {
   joinedTopicIds: [],
   submissionIds: [],
   createdTopicIds: [],
-  badgeStats: { answerCount: 0, answerLikeCount: 0, level: 'newcomer' },
-}
+  rank: 0,
+} as any
 
 export function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const { data: admin } = useAsync(() => userService.getCurrentAdmin(), fallbackAdmin)
+  const { data: admin } = useAsync(() => profileService.getSelfProfile(), fallbackAdmin)
   const navigate = useNavigate()
 
   const handleLogout = async () => {
@@ -79,8 +80,7 @@ export function AdminLayout() {
               end={item.to === '/admin/topics'}
               onClick={() => setSidebarOpen(false)}
               className={({ isActive }) =>
-                `flex h-11 items-center justify-between rounded-md px-3 text-sm font-bold transition whitespace-nowrap ${
-                  isActive ? 'bg-secondary-container text-white' : 'text-ink-muted hover:bg-surface-low hover:text-ink'
+                `flex h-11 items-center justify-between rounded-md px-3 text-sm font-bold transition whitespace-nowrap ${isActive ? 'bg-secondary-container text-white' : 'text-ink-muted hover:bg-surface-low hover:text-ink'
                 }`
               }
             >
@@ -91,7 +91,7 @@ export function AdminLayout() {
 
         <div className="space-y-3 border-t border-border-subtle p-4">
           <div className="flex items-center gap-3">
-            <Avatar name={admin.name} size="sm" />
+            <Avatar name={admin.displayName} size="sm" />
             <div className="min-w-0">
               <p className="truncate text-sm font-bold text-ink">{admin.name}</p>
               <p className="truncate text-xs text-ink-subtle">{admin.email || 'admin'}</p>

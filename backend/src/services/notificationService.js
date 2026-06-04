@@ -128,7 +128,7 @@ export async function createCommentNotifications({
   }
 
   // Resolve topic/submission/comment context via Topic helper
-  const target = await Topic.findTargetByCommentId(commentObjectId.toString())
+  const target = await Topic.findTargetById(commentObjectId.toString())
 
   if (!target) {
     throw new Error('Không tìm thấy comment trong bất kỳ topic nào.')
@@ -252,4 +252,9 @@ export async function createSystemNotification({ userId, actorId, title, content
     target,
   })
   return notification
+}
+
+export default {
+  createCommentNotifications,
+  createSystemNotification,
 }

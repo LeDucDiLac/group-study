@@ -1,26 +1,13 @@
 export type UserRole = 'learner' | 'admin'
-export type AccountStatus = 'active' | 'locked'
-export type TopicStatus = 'open' | 'closed' | 'pending' | 'rejected'
+export type TopicStatus = 'Đang mở' | 'Chưa duyệt' | 'Bị từ chối' | 'Đã hoàn thành'
 export type NotificationType = 'comment' | 'deadline' | 'approved' | 'rejected' | 'closed'
-export type BadgeLevel = 'newcomer' | 'helper' | 'mentor' | 'expert'
-
-export interface BadgeStats {
-  answerCount: number
-  answerLikeCount: number
-  level: BadgeLevel
-}
 
 export interface User {
   id: string
-  name: string
+  displayName: string
   email: string
   role: UserRole
-  status: AccountStatus
-  interests: string[]
-  joinedTopicIds: string[]
-  submissionIds: string[]
-  createdTopicIds: string[]
-  badgeStats: BadgeStats
+  rank: number
 }
 
 export interface ProfileStats {
@@ -34,67 +21,50 @@ export interface ProfileStats {
 }
 
 export interface ResourceFile {
-  id: string
-  name: string
-  type: 'pdf' | 'image' | 'markdown' | 'txt' | 'docx' | 'link'
-  url: string
-  size?: string
+  id: string;
+  label: string;
+  type: 'pdf' | 'image' | 'markdown' | 'txt' | 'docx' | 'link';
+  url: string;
+  size?: string;
 }
 
 export interface Topic {
-  id: string
-  title: string
-  description: string
-  category: string
-  tags: string[]
-  prerequisites: string
-  resources: ResourceFile[]
-  status: TopicStatus
-  createdBy: string
-  proposedBy: string
-  proposedByName?: string
-  proposedByEmail?: string
-  approvedBy?: string
-  approvedByName?: string
-  rejectionReason?: string
-  revisionSuggestions?: string[]
-  proposalReason?: string
-  updatedAt?: string
-  submittedAt?: string
-  reviewedAt?: string
-  reviewedBy?: string
-  reviewedByName?: string
-  reviewedByEmail?: string
-  rejectedAt?: string
-  resubmittedAt?: string
-  commentCount?: number
-  userSubmissionStatus?: 'not_started' | 'in_progress' | 'submitted' | 'locked'
-  canEditProposal?: boolean
-  canStartLearning?: boolean
-  canResubmit?: boolean
-  windowHours: number
-  windowLabel: string
-  submissionCount: number
-  likeCount: number
-  createdAt: string
-  closesAt?: string
+  _id: string;
+  title: string;
+  description: string;
+  category: string;
+  tags: string[];
+  resources: ResourceFile[];
+  status: TopicStatus;
+  createdBy: string | { _id: string; displayName: string; rank?: number };
+  approvedBy: string;
+  rejectionReason?: string;
+  proposalReason: string;
+  windowHours: number;
+  submissionCount: number;
+  likeCount: number;
+  dislikeCount: number;
+  liked: number;
+  participationCount: number;
+  participationStartTime: string | null;
+  mySubmission: Submission | null;
+  createdAt: string;
+  closesAt?: string;
 }
 
 export interface Submission {
-  id: string
-  topicId: string
-  userId: string
+  _id: string
+  user?: User
   isAnonymous: boolean
   understood: string
   notUnderstood: string
-  files: ResourceFile[]
-  wordCount: number
-  timeSpentMinutes: number
+  resources: ResourceFile[]
   likeCount: number
+  dislikeCount: number
   commentCount: number
-  isLocked: boolean
+  status: 'Chưa duyệt' | 'Đã duyệt' | 'Bị từ chối'
   createdAt: string
-  saved?: boolean
+  saved: boolean
 }
 
 export interface Comment {

@@ -106,7 +106,7 @@ export function LoginPage() {
         await authService.register(name, email, password)
       } else {
         const { user } = await authService.login(email, password, remember)
-        redirectTo = user.role === 'admin' ? '/admin/dashboard' : '/topics'
+        redirectTo = user.role === 'admin' ? '/admin' : '/topics'
       }
     } catch {
       setError(tab === 'register' ? 'Không thể tạo tài khoản. Vui lòng kiểm tra email/mật khẩu.' : 'Email hoặc mật khẩu chưa chính xác.')
@@ -322,12 +322,12 @@ export function ForgotPasswordPage() {
 }
 
 export function PublicTopicsPage() {
-  const { data: topics } = useAsync(() => topicService.getTopics({ status: 'open' }), [])
+  const { data: topics } = useAsync(() => topicService.getTopics({ status: 'Đang mở' }), [])
   return (
     <div className="mx-auto max-w-content px-6 py-10">
       <PageHeader title="Chủ đề public" description="Bạn có thể xem trước các chủ đề đang mở. Để tham gia học và nộp bài, hãy đăng nhập." />
       <div className="mt-8 grid grid-cols-1 gap-5 lg:grid-cols-2 xl:grid-cols-3">
-        {topics.map((topic) => <TopicCard key={topic.id} topic={topic} publicMode />)}
+        {topics.map((topic) => <TopicCard key={topic._id} topic={topic} publicMode />)}
       </div>
     </div>
   )

@@ -10,6 +10,10 @@ import topicsRoutes from './routes/topicsRoutes.js'
 import submissionsRoutes from './routes/submissionsRoutes.js'
 import commentsRoutes from './routes/commentsRoutes.js'
 import bookmarksRoutes from './routes/bookmarksRoutes.js'
+import reactionRoutes from './routes/reactionRoute.js'
+import uploadRoutes from './routes/uploadRoutes.js'
+import profileRoutes from './routes/profileRoutes.js'
+import notificationRoute from './routes/notificationRoute.js'
 
 dotenv.config()
 
@@ -47,6 +51,11 @@ app.use('/api/topics', topicsRoutes)
 app.use('/api/submissions', submissionsRoutes)
 app.use('/api/comments', commentsRoutes)
 app.use('/api/bookmarks', bookmarksRoutes)
+app.use('/api/reactions', reactionRoutes)
+app.use('/api/upload', uploadRoutes)
+app.use('/api/profiles', profileRoutes)
+app.use('/api/notifications', notificationRoute)
+app.use('/uploads', express.static('uploads'))
 
 // Fallback
 app.use((req, res) => {

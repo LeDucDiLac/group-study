@@ -32,3 +32,8 @@ export async function getRecentActivities(userId) {
   const user = await User.findById(userId)
   return user ? user.recentActivities : []
 }
+
+export default {
+  addRecentActivity,
+  getRecentActivities,
+}

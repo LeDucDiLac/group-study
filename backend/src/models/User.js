@@ -27,6 +27,7 @@ const userSchema = new Schema(
     },
     rank: {
       type: Number,
+      default: 0,
     },
     submissionPeekedAt: {
       type: Date,
@@ -60,5 +61,15 @@ const userSchema = new Schema(
 )
 
 const User = mongoose.models.User || mongoose.model('User', userSchema)
+
+export async function publicInfo(userId) {
+  const user = await User.findById(userId, { _id: 1, displayName: 1, rank: 1 }).lean()
+  return {
+    id: String(user._id),
+    displayName: user.displayName,
+    rank: user.rank,
+  }
+
+}
 
 export default User

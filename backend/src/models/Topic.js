@@ -175,8 +175,8 @@ const topicSchema = new Schema(
       trim: true,
     },
     reactions: {
-      like: [{ type: Schema.Types.ObjectId, ref: 'User' }],
-      dislike: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+      type: reactionSchema,
+      default: () => ({ like: [], dislike: [] }),
     },
     resources: [topicResourceSchema],
     Participation: [participationSchema],
@@ -191,10 +191,10 @@ const topicSchema = new Schema(
 
 // Static helper: find topic/submission/comment by a comment id (top-level or nested)
 // Returns { topicId, submissionId, commentId, subCommentId? } or null
-topicSchema.statics.findTargetByCommentId = async function findTargetByCommentId(commentId) {
-  if (!commentId) return null
+topicSchema.statics.findTargetById = async function findTargetById(id) {
+  if (!id) return null
 
-  const normalizedId = new mongoose.Types.ObjectId(commentId)
+  const normalizedId = new mongoose.Types.ObjectId(id)
 
   const subCommentMatch = await this.aggregate([
     { $unwind: '$submissions' },
@@ -215,25 +215,6 @@ topicSchema.statics.findTargetByCommentId = async function findTargetByCommentId
     return subCommentMatch[0]
   }
 
-  const subCommentAliasMatch = await this.aggregate([
-    { $unwind: '$submissions' },
-    { $unwind: '$submissions.comments' },
-    { $unwind: '$submissions.comments.subComments' },
-    { $match: { 'submissions.comments.subComments._id': normalizedId } },
-    {
-      $project: {
-        topicId: '$_id',
-        submissionId: '$submissions._id',
-        commentId: '$submissions.comments._id',
-        subCommentId: '$submissions.comments.subComments._id',
-      },
-    },
-  ])
-
-  if (subCommentAliasMatch.length > 0) {
-    return subCommentAliasMatch[0]
-  }
-
   const commentMatch = await this.aggregate([
     { $unwind: '$submissions' },
     { $unwind: '$submissions.comments' },
@@ -251,22 +232,54 @@ topicSchema.statics.findTargetByCommentId = async function findTargetByCommentId
     return commentMatch[0]
   }
 
+  const submissionMatch = await this.aggregate([
+    { $unwind: '$submissions' },
+    { $match: { 'submissions._id': normalizedId } },
+    {
+      $project: {
+        topicId: '$_id',
+        submissionId: '$submissions._id',
+      },
+    },
+  ])
+
+  if (submissionMatch.length > 0) {
+    return submissionMatch[0]
+  }
+
+  const topicMatch = await this.aggregate([
+    { $match: { '_id': normalizedId } },
+    {
+      $project: {
+        topicId: '$_id',
+      },
+    },
+  ])
+
+  if (topicMatch.length > 0) {
+    return topicMatch[0]
+  }
+
   return null
 }
 
 const Topic = mongoose.models.Topic || mongoose.model('Topic', topicSchema)
 
 export function listTopics(filter = {}, options = {}) {
-  
+  // Chỉ trả về chủ đề Đang mở hoặc Đã hoàn thành
   const { page = 1, limit = 10 } = options
   if (page && limit) {
     return Topic.find(filter)
+      .find({
+        $or: [{ status: 'Đang mở' }, { status: 'Đã hoàn thành' }]
+      })
       .select('-proposalReason -rejectionReason, -approvedBy -approvedAt')
+      .populate('createdBy', 'displayName rank')
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
   } else {
-    return Topic.find(filter).sort({ createdAt: -1 })
+    return Topic.find(filter).populate('createdBy', 'displayName rank').sort({ createdAt: -1 })
   }
 }
 

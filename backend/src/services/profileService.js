@@ -86,3 +86,12 @@ export async function getAggregatedSummary(userId) {
   ])
   return { topicsParticipated, topicsCreated, bookmarks }
 }
+
+export default {
+  addSubmissionToSummary,
+  incLikesReceived,
+  decLikesReceived,
+  addLikedItem,
+  removeLikedItem,
+  getAggregatedSummary,
+}

@@ -9,23 +9,20 @@ export function SubmissionCard({ submission, author, to }: { submission: Submiss
     <Card className="p-5">
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Avatar name={author.name} anonymous={submission.isAnonymous} />
+          <Avatar name={author.displayName} anonymous={submission.isAnonymous} userId={author.id} />
           <div>
-            <p className="font-bold text-primary-container">{submission.isAnonymous ? 'Người học ẩn danh' : author.name}</p>
+            <p className="font-bold text-primary-container">{submission.isAnonymous ? 'Người học ẩn danh' : author.displayName}</p>
             <div className="mt-1">
-              <ContributionBadge stats={author.badgeStats} compact anonymous={submission.isAnonymous} />
+              <ContributionBadge rank={author.rank} compact anonymous={submission.isAnonymous} />
             </div>
           </div>
         </div>
-        <Badge tone={submission.isLocked ? 'neutral' : 'warning'}>{submission.isLocked ? 'Đã khóa' : 'Đang mở'}</Badge>
       </div>
       <div className="mt-4 grid gap-3 text-sm text-ink-muted">
         <p><span className="font-bold text-ink">Đã hiểu:</span> {submission.understood}</p>
         <p><span className="font-bold text-ink">Chưa hiểu:</span> {submission.notUnderstood}</p>
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-4 border-t border-border-subtle pt-4 text-sm font-semibold text-ink-muted">
-        <span>{submission.wordCount} từ</span>
-        <span>{minutesToReadable(submission.timeSpentMinutes)}</span>
         <span className="inline-flex items-center gap-1"><Icon name="heart" size={15} /> {submission.likeCount}</span>
         <span className="inline-flex items-center gap-1"><Icon name="message" size={15} /> {submission.commentCount}</span>
         <Link className="ml-auto whitespace-nowrap font-bold text-secondary-container hover:text-secondary" to={to}>Xem bình luận</Link>

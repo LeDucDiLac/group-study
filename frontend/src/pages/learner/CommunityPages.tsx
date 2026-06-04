@@ -1,35 +1,30 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { BadgeProgressCard, ContributionBadge } from '@/components/badge/ContributionBadge'
 import { SubmissionCard } from '@/components/submission/SubmissionCard'
 import { ActionLink, Avatar, Badge, Button, Card, EmptyState, Icon, Modal, PageHeader, Select, Textarea } from '@/components/ui'
 import {
+  authService,
   bookmarkService,
   commentService,
-  deadlineService,
-  insightService,
-  lookupService,
   notificationService,
+  profileService,
   submissionService,
+  topicFallback,
   topicService,
-  userService,
+  userFallback,
 } from '@/services/api'
-import type { Comment, Deadline, Notification, ProfileStats, Submission, User } from '@/types/domain'
-import { BADGE_LABELS } from '@/utils/badges'
+import type { Comment, Deadline, Notification, ProfileStats, Submission, Topic, User } from '@/types/domain'
+import { RANK_LABELS, getRankTier } from '@/utils/badges'
 import { formatDateTime } from '@/utils/format'
 import { useAsync } from '@/utils/hooks'
 
 const fallbackProfileUser: User = {
   id: 'loading',
-  name: 'Người học',
+  displayName: 'Người học',
   email: '',
   role: 'learner',
-  status: 'active',
-  interests: [],
-  joinedTopicIds: [],
-  submissionIds: [],
-  createdTopicIds: [],
-  badgeStats: { answerCount: 0, answerLikeCount: 0, level: 'newcomer' },
+  rank: 0,
 }
 
 const fallbackProfileStats: ProfileStats = {
@@ -45,8 +40,8 @@ const fallbackProfileStats: ProfileStats = {
 export function PeerLearningPage() {
   const { id = 't1' } = useParams()
   const [sortBy, setSortBy] = useState('engagement')
-  const { data: topic } = useAsync(() => topicService.getTopicById(id), lookupService.getTopic(id), [id])
-  const { data: mySubmission, loading: checkingAccess } = useAsync(() => submissionService.getMySubmission(id), null, [id])
+  const { data: topic, loading: checkingAccess } = useAsync(() => topicService.getTopicById(id), topicFallback(id), [id])
+  const mySubmission = topic.mySubmission
   const { data: submissions, loading } = useAsync(() => submissionService.getSubmissionsByTopic(id), [], [id])
   const accessDenied = !checkingAccess && !mySubmission
 
@@ -72,6 +67,7 @@ export function PeerLearningPage() {
     <div className="mx-auto max-w-[1160px]">
       <PeerPageHeader topicTitle={topic.title} />
       <SortBar count={submissions.length} sortBy={sortBy} onSortChange={setSortBy} />
+      {mySubmission && <MySubmissionBlock submission={mySubmission} />}
       <div className="mt-5 grid gap-4">
         {loading ? (
           <>
@@ -79,18 +75,77 @@ export function PeerLearningPage() {
             <PeerSubmissionSkeleton />
           </>
         ) : sortedSubmissions.length ? (
-          sortedSubmissions.map((submission) => (
-            <PeerSubmissionCard
-              key={submission.id}
-              submission={submission}
-              author={lookupService.getUser(submission.userId)}
-              to={`/topics/${id}/peer/${submission.id}`}
-            />
-          ))
+          sortedSubmissions.map((submission) => {
+            if (submission.user?.id === mySubmission?.user?.id) {
+              return null
+            }
+            return (
+              <PeerSubmissionCard
+                key={submission._id}
+                submission={submission}
+                author={submission.user ?? fallbackProfileUser}
+                to={`/topics/${id}/peer/${submission._id}`}
+              />
+            )
+          })
         ) : (
           <EmptyState title="Chưa có bài cộng đồng nào" description="Hãy quay lại sau khi có thêm người học nộp bài." />
         )}
       </div>
+    </div>
+  )
+}
+
+function MySubmissionBlock({ submission }: { submission: Submission }) {
+  const isPending = submission.status === 'Chưa duyệt'
+  return (
+    <div className="mt-5">
+      <div className="mb-3 flex items-center gap-2">
+        <span className="text-sm font-extrabold text-primary-container">Bài của bạn</span>
+        {isPending && (
+          <Badge tone="warning">Chờ duyệt</Badge>
+        )}
+        {submission.status === 'Đã duyệt' && (
+          <Badge tone="success">Đã duyệt</Badge>
+        )}
+      </div>
+      <Card className={`p-5 ${isPending ? 'border-amber bg-amber-light/30' : 'border-emerald-container'}`}>
+        {isPending && (
+          <div className="mb-4 flex items-start gap-2 rounded-md border border-amber bg-amber-light/50 px-3 py-2.5 text-sm font-semibold text-amber-900">
+            <Icon name="clock" size={15} className="mt-0.5 shrink-0" />
+            Bài nộp của bạn đang chờ admin duyệt trước khi hiển thị cho cộng đồng.
+          </div>
+        )}
+        <div className="grid gap-3">
+          <SubmissionContentBlock tone="understood" title="Đã hiểu" icon="check" content={submission.understood} />
+          <SubmissionContentBlock tone="unclear" title="Chưa hiểu" icon="message" content={submission.notUnderstood} />
+          {submission.resources.length > 0 && (
+            <section className="rounded-md bg-surface-low p-5">
+              <h2 className="text-lg font-extrabold text-primary-container">File đính kèm</h2>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {submission.resources.map((file) => (
+                  <div
+                    key={file.id}
+                    className="cursor-pointer rounded border border-border-subtle bg-white px-3 py-1.5 text-sm font-semibold text-ink-subtle hover:bg-surface-low"
+                    onClick={() => {
+                      if (!file.url) return
+                      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+                      window.open(baseUrl + file.url, '_blank')
+                    }}
+                  >
+                    {file.label}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+        <div className="mt-4 flex items-center justify-between gap-4 border-t border-border-subtle pt-4 text-sm font-semibold text-ink-subtle">
+          <span className="inline-flex items-center gap-1.5">
+          </span>
+          <Badge tone="neutral">{submission.isAnonymous ? 'Ẩn danh' : 'Công khai'}</Badge>
+        </div>
+      </Card>
     </div>
   )
 }
@@ -135,22 +190,26 @@ function SortBar({ count, sortBy, onSortChange }: { count: number; sortBy: strin
 }
 
 function PeerSubmissionCard({ submission, author, to }: { submission: Submission; author: User; to: string }) {
-  const roleLabel = BADGE_LABELS[author.badgeStats.level]
-  const roleTone = author.badgeStats.level === 'expert' ? 'brand' : author.badgeStats.level === 'mentor' ? 'success' : author.badgeStats.level === 'helper' ? 'info' : 'neutral'
-  const displayName = submission.isAnonymous ? 'Người học ẩn danh' : author.name
-  const { data: currentUser } = useAsync(() => userService.getCurrentUser(), fallbackProfileUser)
+  const rankTier = getRankTier(author.rank)
+  const roleLabel = RANK_LABELS[rankTier]
+  const roleTone = rankTier >= 9 ? 'warning' : rankTier >= 7 ? 'brand' : rankTier >= 5 ? 'success' : rankTier >= 3 ? 'info' : 'neutral'
+  const displayName = submission.isAnonymous ? 'Người học ẩn danh' : author.displayName
+  const { data: currentUser } = useAsync(() => authService.getSessionUser().then(u => u ?? fallbackProfileUser), fallbackProfileUser)
   const [liked, setLiked] = useState(false)
+  const [disliked, setDisliked] = useState(false)
   const [likePending, setLikePending] = useState(false)
-  const isOwnSubmission = currentUser.id === submission.userId
-  const likeCount = submission.likeCount + (liked ? 1 : 0)
+  const isOwnSubmission = currentUser.id === submission.user?.id
+  const displayLikeCount = submission.likeCount + (liked ? 1 : 0)
+  const displayDislikeCount = submission.dislikeCount + (disliked ? 1 : 0)
 
-  async function toggleSubmissionLike() {
+  async function toggleLike() {
     if (isOwnSubmission || likePending) return
     const nextLiked = !liked
     setLiked(nextLiked)
+    if (nextLiked && disliked) setDisliked(false)
     setLikePending(true)
     try {
-      await submissionService.toggleLike(submission.id, liked)
+      await submissionService.toggleLike(submission._id, liked)
     } catch {
       setLiked(liked)
     } finally {
@@ -158,52 +217,98 @@ function PeerSubmissionCard({ submission, author, to }: { submission: Submission
     }
   }
 
+  async function toggleDislike() {
+    if (isOwnSubmission || likePending) return
+    const nextDisliked = !disliked
+    setDisliked(nextDisliked)
+    if (nextDisliked && liked) setLiked(false)
+    setLikePending(true)
+    try {
+      await submissionService.toggleDislike(submission._id, disliked)
+    } catch {
+      setDisliked(disliked)
+    } finally {
+      setLikePending(false)
+    }
+  }
+
+  const resources = submission.resources ?? submission.resources ?? []
+
   return (
     <Card className="group p-5 transition hover:border-secondary-fixed-dim hover:shadow-card-hover">
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
-          <Avatar name={displayName} anonymous={submission.isAnonymous} />
+          <Avatar name={displayName} anonymous={submission.isAnonymous} userId={author.id} />
           <div className="min-w-0">
             <p className="truncate font-extrabold text-primary-container">{displayName}</p>
             <div className="mt-1 flex flex-wrap gap-2">
               <Badge tone={roleTone}>{roleLabel}</Badge>
-              <ContributionBadge stats={author.badgeStats} compact anonymous={submission.isAnonymous} />
             </div>
           </div>
         </div>
-        <Badge tone={submission.isLocked ? 'neutral' : 'warning'}>{submission.isLocked ? 'Đã khóa' : 'Đang mở'}</Badge>
       </div>
 
       <div className="mt-5 grid gap-3">
         <SubmissionContentBlock tone="understood" title="Đã hiểu" icon="check" content={submission.understood} />
         <SubmissionContentBlock tone="unclear" title="Chưa hiểu" icon="message" content={submission.notUnderstood} />
+        {resources.length > 0 && (
+          <section className="rounded-md bg-surface-low p-4">
+            <p className="text-xs font-extrabold text-ink-muted">Tài liệu đính kèm</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {resources.map((r) => (
+                <a
+                  key={r.url}
+                  href={r.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-white px-2.5 py-1.5 text-xs font-semibold text-ink transition hover:border-secondary-container hover:text-secondary-container"
+                >
+                  <Icon name="file" size={13} />
+                  {r.label}
+                </a>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
 
-      <div className="mt-5 flex flex-col gap-3 border-t border-border-subtle pt-4 sm:flex-row sm:items-center sm:justify-between">
-        <SubmissionMeta likeCount={likeCount} commentCount={submission.commentCount} />
-        <div className="flex flex-wrap gap-2 sm:justify-end">
+      <div className="mt-5 flex flex-wrap justify-end gap-2 border-t border-border-subtle pt-4">
+        <button
+          type="button"
+          className={`inline-flex h-9 items-center justify-center gap-2 rounded-md border px-3 text-sm font-bold transition whitespace-nowrap ${liked
+            ? 'border-secondary-container bg-secondary-fixed text-secondary-container'
+            : 'border-border bg-white text-ink hover:border-secondary-container hover:bg-secondary-fixed hover:text-secondary-container'
+            }`}
+          onClick={toggleLike}
+          disabled={isOwnSubmission || likePending}
+          aria-pressed={liked}
+          aria-label={isOwnSubmission ? 'Không thể thích bài của bạn' : liked ? 'Bỏ thích' : 'Thích'}
+        >
+          <Icon name="heart" size={15} />
+          {isOwnSubmission ? 'Bài của bạn' : liked ? `Đã thích · ${displayLikeCount}` : `Thích · ${displayLikeCount}`}
+        </button>
+        {!isOwnSubmission && (
           <button
             type="button"
-            className={`inline-flex h-9 items-center justify-center gap-2 rounded-md border px-3 text-sm font-bold transition whitespace-nowrap ${
-              liked
-                ? 'border-secondary-container bg-secondary-fixed text-secondary-container'
-                : 'border-border bg-white text-ink hover:border-secondary-container hover:bg-secondary-fixed hover:text-secondary-container'
-            }`}
-            onClick={toggleSubmissionLike}
-            disabled={isOwnSubmission || likePending}
-            aria-pressed={liked}
-            aria-label={isOwnSubmission ? 'Không thể thích bài của bạn' : liked ? `Bỏ thích bài của ${displayName}` : `Thích bài của ${displayName}`}
+            className={`inline-flex h-9 items-center justify-center gap-2 rounded-md border px-3 text-sm font-bold transition whitespace-nowrap ${disliked
+              ? 'border-error bg-error-container/40 text-error'
+              : 'border-border bg-white text-ink hover:border-error hover:bg-error-container/30 hover:text-error'
+              }`}
+            onClick={toggleDislike}
+            disabled={likePending}
+            aria-pressed={disliked}
+            aria-label={disliked ? 'Bỏ không thích' : 'Không thích'}
           >
-            <Icon name="heart" size={15} />
-            {isOwnSubmission ? 'Bài của bạn' : liked ? 'Đã thích' : 'Thích'}
+            <Icon name="brokenHeart" size={15} />
+            {disliked ? `Đã không thích · ${displayDislikeCount}` : `Không thích · ${displayDislikeCount}`}
           </button>
-          <Link
-            to={to}
-            className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-white px-3 text-sm font-bold text-ink transition hover:border-secondary-container hover:bg-secondary-fixed hover:text-secondary-container whitespace-nowrap"
-          >
-            Xem {submission.commentCount} bình luận
-          </Link>
-        </div>
+        )}
+        <Link
+          to={to}
+          className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-white px-3 text-sm font-bold text-ink transition hover:border-secondary-container hover:bg-secondary-fixed hover:text-secondary-container whitespace-nowrap"
+        >
+          Xem {submission.commentCount} bình luận
+        </Link>
       </div>
     </Card>
   )
@@ -232,23 +337,6 @@ function SubmissionContentBlock({
   )
 }
 
-function SubmissionMeta({ likeCount, commentCount }: { likeCount: number; commentCount: number }) {
-  const items = [
-    `${likeCount} lượt thích`,
-    `${commentCount} bình luận`,
-  ]
-  return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm font-semibold text-ink-subtle">
-      {items.map((item, index) => (
-        <span key={item} className="inline-flex items-center gap-3">
-          {index > 0 && <span className="h-1 w-1 rounded-full bg-border" />}
-          {item}
-        </span>
-      ))}
-    </div>
-  )
-}
-
 function PeerSubmissionSkeleton() {
   return (
     <Card className="p-5">
@@ -273,21 +361,22 @@ function PeerSubmissionSkeleton() {
 
 export function PeerDetailPage() {
   const { submissionId = 's1', id = 't1' } = useParams()
-  const { data: submission } = useAsync<Submission | null>(() => submissionService.getSubmission(submissionId), null, [submissionId])
-  const author = lookupService.getUser(submission?.userId ?? 'u2')
-  const topic = lookupService.getTopic(id)
+  const { data: submissions } = useAsync(() => submissionService.getSubmissionsByTopic(id), [], [id])
+  const submission = submissions.find(s => s._id === submissionId) ?? null
+  const author = userFallback(submission?.user?.id ?? 'u2')
+  const topic = topicFallback(id)
   const [saved, setSaved] = useState(false)
   const [bookmarkPending, setBookmarkPending] = useState(false)
 
   useEffect(() => {
     setSaved(Boolean(submission?.saved))
-  }, [submission?.id, submission?.saved])
+  }, [submission?._id, submission?.saved])
 
   async function toggleBookmark() {
     if (!submission || bookmarkPending) return
     setBookmarkPending(true)
     try {
-      const result = await bookmarkService.toggleBookmark(submission.id)
+      const result = await bookmarkService.toggleBookmark(submission._id)
       setSaved(result.saved)
     } catch {
       setSaved(saved)
@@ -304,10 +393,10 @@ export function PeerDetailPage() {
         <Card className="p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex items-center gap-3">
-              <Avatar name={author.name} anonymous={submission.isAnonymous} />
+              <Avatar name={author.displayName} anonymous={submission.isAnonymous} userId={author.id} />
               <div>
-                <p className="font-extrabold text-primary-container">{submission.isAnonymous ? 'Người học ẩn danh' : author.name}</p>
-                <ContributionBadge stats={author.badgeStats} compact anonymous={submission.isAnonymous} />
+                <p className="font-extrabold text-primary-container">{submission.isAnonymous ? 'Người học ẩn danh' : author.displayName}</p>
+                <ContributionBadge rank={author.rank} compact anonymous={submission.isAnonymous} />
               </div>
             </div>
             <Button
@@ -332,7 +421,7 @@ export function PeerDetailPage() {
             </section>
           </div>
         </Card>
-        <CommentSection submission={submission} author={author} />
+        <CommentSection submission={submission} author={author} topicId={id} />
       </div>
       <aside className="space-y-4">
         <Card className="p-5">
@@ -351,10 +440,10 @@ type ThreadComment = Comment & {
   replies: ThreadComment[]
 }
 
-function CommentSection({ submission, author }: { submission: Submission; author: User }) {
+function CommentSection({ submission, author, topicId }: { submission: Submission; author: User; topicId?: string }) {
   const [sortBy, setSortBy] = useState('newest')
-  const { data: currentUser } = useAsync(() => userService.getCurrentUser(), fallbackProfileUser)
-  const { data: flatComments, loading } = useAsync(() => commentService.getComments(submission.id), [], [submission.id])
+  const { data: currentUser } = useAsync(() => authService.getSessionUser().then(u => u ?? fallbackProfileUser), fallbackProfileUser)
+  const { data: flatComments, loading } = useAsync(() => commentService.getComments(submission._id, topicId), [], [submission._id, topicId])
   const [comments, setComments] = useState<ThreadComment[]>([])
   const [draft, setDraft] = useState('')
   const [likedCommentIds, setLikedCommentIds] = useState<string[]>([])
@@ -368,38 +457,14 @@ function CommentSection({ submission, author }: { submission: Submission; author
   async function addRootComment() {
     const content = draft.trim()
     if (!content) return
-    try {
-      const created = await commentService.createComment(submission.id, content)
-      setComments((current) => [{ ...created, author: currentUser, replies: [] }, ...current])
-      setDraft('')
-      return
-    } catch {
-      // RLS handles the hard block; keep the draft so the learner can retry.
-    }
-    setComments((current) => [
-      createLocalComment({
-        id: `local-${Date.now()}`,
-        authorName: 'Nguyễn Minh Anh',
-        role: 'Dẫn Lối Tri Thức',
-        content,
-      }),
-      ...current,
-    ])
+    const created = await commentService.createComment(submission._id, content, topicId)
+    setComments((current) => [{ ...created, author: currentUser, replies: [] }, ...current])
     setDraft('')
   }
 
   async function addReply(parentId: string, content: string) {
-    try {
-      const created = await commentService.createReply(submission.id, parentId, content)
-      setComments((current) => addReplyToThread(current, parentId, { ...created, author: currentUser, replies: [] }))
-    } catch {
-      setComments((current) => addReplyToThread(current, parentId, createLocalComment({
-        id: `reply-${Date.now()}`,
-        authorName: currentUser.name,
-        role: 'Dẫn Lối Tri Thức',
-        content,
-      })))
-    }
+    const created = await commentService.createReply(submission._id, parentId, content, topicId)
+    setComments((current) => addReplyToThread(current, parentId, { ...created, author: currentUser, replies: [] }))
   }
 
   async function toggleLike(comment: ThreadComment) {
@@ -414,7 +479,7 @@ function CommentSection({ submission, author }: { submission: Submission; author
       })),
     )
     try {
-      await commentService.toggleLike(commentId, alreadyLiked)
+      await commentService.toggleLike(commentId, alreadyLiked, submission._id)
     } catch {
       setLikedCommentIds((current) => (alreadyLiked ? [...current, commentId] : current.filter((id) => id !== commentId)))
       setComments((current) =>
@@ -450,7 +515,8 @@ function CommentSection({ submission, author }: { submission: Submission; author
         value={draft}
         onChange={setDraft}
         onSubmit={addRootComment}
-        authorName={currentUser.name}
+        authorName={currentUser.displayName}
+        authorId={currentUser.id}
         placeholder="Viết bình luận hoặc đặt câu hỏi..."
       />
 
@@ -481,6 +547,7 @@ function CommentComposer({
   onChange,
   onSubmit,
   authorName,
+  authorId,
   placeholder,
   onCancel,
   compact = false,
@@ -489,13 +556,14 @@ function CommentComposer({
   onChange: (value: string) => void
   onSubmit: () => void | Promise<void>
   authorName: string
+  authorId?: string
   placeholder: string
   onCancel?: () => void
   compact?: boolean
 }) {
   return (
     <div className={`mt-4 flex items-start gap-3 rounded-md border border-border-subtle bg-white p-3 ${compact ? 'ml-0' : ''}`}>
-      <Avatar name={authorName} size="sm" />
+      <Avatar name={authorName} size="sm" userId={authorId} />
       <div className="min-w-0 flex-1">
         <Textarea
           value={value}
@@ -556,11 +624,11 @@ function CommentItem({
     <article className={depth ? 'ml-5 border-l border-border-subtle pl-4 md:ml-8' : ''}>
       <div className="rounded-md border border-border-subtle bg-white p-4">
         <div className="flex items-start gap-3">
-          <Avatar name={comment.author.name} size="sm" />
+          <Avatar name={comment.author.displayName} size="sm" userId={comment.author.id} />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="font-bold text-ink">{comment.author.name}</p>
-              <ContributionBadge stats={comment.author.badgeStats} compact />
+              <p className="font-bold text-ink">{comment.author.displayName}</p>
+              <ContributionBadge rank={comment.author.rank} compact />
               <span className="text-xs font-semibold text-ink-subtle">{formatDateTime(comment.createdAt)}</span>
             </div>
             <p className="mt-2 text-sm leading-6 text-ink-muted">{comment.content}</p>
@@ -571,7 +639,7 @@ function CommentItem({
                 onClick={() => onLike(comment)}
                 disabled={isOwnComment}
                 aria-pressed={liked}
-                aria-label={isOwnComment ? 'Không thể thích bình luận của bạn' : liked ? `Bỏ thích bình luận của ${comment.author.name}` : `Thích bình luận của ${comment.author.name}`}
+                aria-label={isOwnComment ? 'Không thể thích bình luận của bạn' : liked ? `Bỏ thích bình luận của ${comment.author.displayName}` : `Thích bình luận của ${comment.author.displayName}`}
               >
                 {liked ? 'Đã thích' : 'Thích'}
               </button>
@@ -594,8 +662,9 @@ function CommentItem({
           onChange={setReplyDraft}
           onSubmit={submitReply}
           onCancel={() => setReplyOpen(false)}
-          authorName={lookupService.getUser(currentUserId).name}
-          placeholder={`Trả lời ${comment.author.name}...`}
+          authorName={userFallback(currentUserId).displayName}
+          authorId={currentUserId}
+          placeholder={`Trả lời ${comment.author.displayName}...`}
         />
       )}
 
@@ -649,111 +718,7 @@ function CommentSkeleton() {
   )
 }
 
-function getInitialThreadComments(submission: Submission, author: User): ThreadComment[] {
-  if (submission.id !== 's4' && submission.commentCount === 0) return []
-  if (submission.id !== 's4') {
-    return [
-      createLocalComment({
-        id: 'fallback-1',
-        authorName: 'Nguyễn Minh Anh',
-        role: 'Dẫn Lối Tri Thức',
-        content: 'Bài viết rõ ràng. Bạn có thể bổ sung thêm một ví dụ áp dụng trong bài tập không?',
-        likes: 3,
-      }),
-    ]
-  }
-
-  return [
-    {
-      id: 'c3',
-      authorName: 'Lê Quang Huy',
-      role: 'Người học',
-      time: '2 ngày trước',
-      content: 'Bài này ngắn nhưng dễ hiểu. Nếu thêm một ví dụ về enumerate thì sẽ hoàn chỉnh hơn.',
-      likes: 3,
-      replies: [],
-    },
-    {
-      id: 'c2',
-      authorName: 'Phạm Linh',
-      role: 'Người học',
-      time: 'Hôm qua',
-      content: 'Mình cũng hay nhầm phần hashable key. Có phải list không dùng làm key được vì nó có thể thay đổi không?',
-      likes: 8,
-      replies: [
-        {
-          id: 'c2-r1',
-          authorName: author.name,
-          role: 'Bậc Thầy Cộng Đồng',
-          time: 'Hôm qua',
-          content: 'Đúng rồi. Key trong dict cần hashable, còn list là mutable nên không dùng làm key được.',
-          likes: 5,
-          replies: [],
-        },
-      ],
-    },
-    {
-      id: 'c1',
-      authorName: 'Nguyễn Minh Anh',
-      role: 'Dẫn Lối Tri Thức',
-      time: '2 giờ trước',
-      content: 'Phần giải thích về Dict khá rõ. Em có thể bổ sung thêm ví dụ khi nào nên dùng dict thay vì list lồng nhau không?',
-      likes: 6,
-      replies: [
-        {
-          id: 'c1-r1',
-          authorName: author.name,
-          role: 'Bậc Thầy Cộng Đồng',
-          time: '1 giờ trước',
-          content: 'Mình nghĩ dict phù hợp khi dữ liệu có khóa định danh rõ, ví dụ mã sinh viên, username hoặc id sản phẩm.',
-          likes: 4,
-          replies: [],
-        },
-        {
-          id: 'c1-r2',
-          authorName: 'Trần Hoàng Nam',
-          role: 'Người học',
-          time: '45 phút trước',
-          content: 'Ví dụ này dễ hiểu hơn nhiều, nhất là phần id sản phẩm.',
-          likes: 2,
-          replies: [],
-        },
-      ],
-    },
-  ]
-}
-
-function createLocalComment({
-  id,
-  authorName,
-  role,
-  content,
-  likes = 0,
-}: {
-  id: string
-  authorName: string
-  role: ThreadComment['role']
-  content: string
-  likes?: number
-}): ThreadComment {
-  const level = role.includes('Bậc') ? 'expert' : role.includes('Dẫn') ? 'mentor' : 'newcomer'
-  const localAuthor: User = {
-    ...fallbackProfileUser,
-    id,
-    name: authorName,
-    badgeStats: { answerCount: 0, answerLikeCount: 0, level },
-  }
-  return {
-    id,
-    submissionId: 'local',
-    userId: id,
-    content,
-    likeCount: likes,
-    createdAt: new Date().toISOString(),
-    author: localAuthor,
-    replies: [],
-  }
-}
+// Local comment creation logic removed
 
 function countThreadComments(comments: ThreadComment[]): number {
   return comments.reduce((sum, comment) => sum + 1 + countThreadComments(comment.replies), 0)
@@ -766,7 +731,7 @@ function countCommentEngagement(comment: ThreadComment): number {
 function buildCommentTree(comments: Comment[], fallbackAuthor: User): ThreadComment[] {
   const nodes = comments.map((comment) => ({
     ...comment,
-    author: lookupService.getUser(comment.userId) ?? fallbackAuthor,
+    author: userFallback(comment.userId) ?? fallbackAuthor,
     replies: [],
   })) as ThreadComment[]
   const byId = new Map(nodes.map((comment) => [comment.id, comment]))
@@ -801,19 +766,23 @@ function updateThreadComment(comments: ThreadComment[], commentId: string, updat
 }
 
 export function ProfilePage() {
-  const { data: user } = useAsync(() => userService.getCurrentUser(), fallbackProfileUser)
-  const { data: stats } = useAsync(() => userService.getProfileStats(), fallbackProfileStats)
+  const { data: user } = useAsync(() => authService.getSessionUser().then(u => u ?? fallbackProfileUser), fallbackProfileUser)
+  const { data: stats } = useAsync(
+    () => user.id && user.id !== 'loading' ? profileService.getProfileStats(user.id) : Promise.resolve(fallbackProfileStats),
+    fallbackProfileStats,
+    [user.id],
+  )
   return (
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
       <Card className="p-6">
-        <Avatar name={user.name} size="lg" />
-        <h1 className="mt-4 text-2xl font-extrabold text-primary-container">{user.name}</h1>
+        <Avatar name={user.displayName} size="lg" userId={user.id} />
+        <h1 className="mt-4 text-2xl font-extrabold text-primary-container">{user.displayName}</h1>
         <p className="text-sm text-ink-muted">{user.email}</p>
-        <div className="mt-4"><ContributionBadge stats={user.badgeStats} /></div>
-        <div className="mt-5 flex flex-wrap gap-2">{user.interests.map((interest) => <Badge key={interest}>{interest}</Badge>)}</div>
+        <div className="mt-4"><ContributionBadge rank={user.rank} /></div>
+        <div className="mt-5 flex flex-wrap gap-2">{(user as any).interests?.map((interest: string) => <Badge key={interest}>{interest}</Badge>)}</div>
       </Card>
       <div className="space-y-5">
-        <BadgeProgressCard stats={user.badgeStats} />
+        <BadgeProgressCard rank={user.rank} />
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <Card className="p-4"><p className="text-2xl font-extrabold">{stats.joinedTopicCount}</p><p className="text-sm text-ink-muted">chủ đề tham gia</p></Card>
           <Card className="p-4"><p className="text-2xl font-extrabold">{stats.submissionCount}</p><p className="text-sm text-ink-muted">bài đã nộp</p></Card>
@@ -868,11 +837,10 @@ export function NotificationsPage() {
               key={item.value}
               type="button"
               onClick={() => setFilter(item.value)}
-              className={`h-9 rounded-full px-3.5 text-sm font-bold transition ${
-                filter === item.value
-                  ? 'bg-secondary-container text-white'
-                  : 'bg-transparent text-ink-muted hover:bg-surface-low hover:text-ink'
-              }`}
+              className={`h-9 rounded-full px-3.5 text-sm font-bold transition ${filter === item.value
+                ? 'bg-secondary-container text-white'
+                : 'bg-transparent text-ink-muted hover:bg-surface-low hover:text-ink'
+                }`}
             >
               {item.label} <span className="opacity-75">({item.count})</span>
             </button>
@@ -1078,7 +1046,17 @@ export function NotificationDetailPage() {
 }
 
 export function CalendarPage() {
-  const { data: deadlines } = useAsync(() => deadlineService.getDeadlines(), [])
+  const { data: topics } = useAsync(() => topicService.getParticipatedTopics(), [])
+  const deadlines: Deadline[] = topics
+    .map(t => ({
+      id: `deadline-${t._id}`,
+      topicId: t._id,
+      title: t.title,
+      dueAt: t.participationStartTime
+        ? new Date(new Date(t.participationStartTime).getTime() + t.windowHours * 60 * 60 * 1000).toISOString()
+        : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      status: t.mySubmission ? 'submitted' : 'not_submitted',
+    }))
   const [filter, setFilter] = useState<Deadline['status'] | 'all'>('all')
   const filteredDeadlines = filter === 'all' ? deadlines : deadlines.filter((deadline) => deadline.status === filter)
   const summary = {
@@ -1156,11 +1134,10 @@ function DeadlineTabs({
           <button
             key={tab.value}
             type="button"
-            className={`h-9 rounded-full px-3.5 text-sm font-bold transition whitespace-nowrap ${
-              active === tab.value
-                ? 'bg-secondary-container text-white'
-                : 'bg-transparent text-ink-muted hover:bg-surface-low hover:text-ink'
-            }`}
+            className={`h-9 rounded-full px-3.5 text-sm font-bold transition whitespace-nowrap ${active === tab.value
+              ? 'bg-secondary-container text-white'
+              : 'bg-transparent text-ink-muted hover:bg-surface-low hover:text-ink'
+              }`}
             onClick={() => onChange(tab.value)}
           >
             {tab.label} <span className="opacity-75">({tab.count})</span>
@@ -1247,9 +1224,9 @@ function formatDeadlineDisplay(value: string) {
 export function BookmarkPage() {
   const { data: bookmarks, setData: setBookmarks } = useAsync(() => bookmarkService.getBookmarks(), [])
 
-  async function removeBookmark(submissionId: string) {
-    await bookmarkService.toggleBookmark(submissionId)
-    setBookmarks((current) => current.filter((submission) => submission.id !== submissionId))
+  async function removeBookmark(bookmarkId: string) {
+    await bookmarkService.deleteBookmark(bookmarkId)
+    setBookmarks((current) => current.filter((b) => b._id !== bookmarkId))
   }
 
   return (
@@ -1257,19 +1234,26 @@ export function BookmarkPage() {
       <PageHeader title="Bookmark / Bài đã lưu" description="Những bài giải thích hay được lưu lại từ khu vực dạy chéo." />
       <div className="mt-6 grid gap-4">
         {bookmarks.length ? (
-          bookmarks.map((submission) => (
-            <div key={submission.id} className="relative">
-              <SubmissionCard
-                submission={submission}
-                author={lookupService.getUser(submission.userId)}
-                to={`/topics/${submission.topicId}/peer/${submission.id}`}
-              />
-              <div className="mt-2 flex justify-end">
-                <Button size="sm" variant="secondary" onClick={() => removeBookmark(submission.id)}>
-                  Bỏ lưu
-                </Button>
+          bookmarks.map((bookmark) => (
+            <Card key={bookmark._id} className="flex items-center justify-between gap-4 p-4">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-ink-muted">
+                  Bài nộp đã lưu
+                </p>
+                <Link
+                  to={bookmark.target.topicId && bookmark.target.submissionId
+                    ? `/topics/${bookmark.target.topicId}/peer/${bookmark.target.submissionId}`
+                    : '#'}
+                  className="mt-1 block text-sm font-bold text-secondary-container hover:underline truncate"
+                >
+                  Xem bài nộp →
+                </Link>
+                <p className="mt-1 text-xs text-ink-subtle">{formatDateTime(bookmark.createdAt)}</p>
               </div>
-            </div>
+              <Button size="sm" variant="secondary" onClick={() => removeBookmark(bookmark._id)}>
+                Bỏ lưu
+              </Button>
+            </Card>
           ))
         ) : (
           <EmptyState title="Chưa có bài đã lưu" description="Khi thấy một bài hay trong dạy chéo, hãy lưu lại để xem sau." />
@@ -1280,15 +1264,24 @@ export function BookmarkPage() {
 }
 
 export function CommunityInsightPage() {
-  const { data: insight } = useAsync(() => insightService.getCommunityInsight('10000000-0000-0000-0000-000000000001'), undefined as never)
-  if (!insight) return null
+  const { id = '' } = useParams()
+  const { data: submissions } = useAsync(
+    () => id ? submissionService.getSubmissionsByTopic(id) : Promise.resolve([]),
+    [],
+    [id],
+  )
+  const insight = {
+    understoodPoints: submissions.map(s => s.understood).filter(Boolean),
+    unclearPoints: submissions.map(s => s.notUnderstood).filter(Boolean),
+    submissionCount: submissions.length,
+  }
+  if (!submissions.length) return null
   return (
     <div>
       <PageHeader title="Community Insight" description="Tổng hợp điểm nhiều người đã hiểu, chưa hiểu và câu hỏi phổ biến từ bài nộp." />
-      <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-3">
+      <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
         <InsightList title="Nhiều người đã hiểu" items={insight.understoodPoints} tone="success" />
         <InsightList title="Nhiều người chưa hiểu" items={insight.unclearPoints} tone="success" />
-        <InsightList title="Câu hỏi phổ biến" items={insight.commonQuestions} tone="brand" />
       </div>
       <Card className="mt-5 p-5 text-sm font-semibold text-ink-muted">Dữ liệu tổng hợp từ {insight.submissionCount} bài nộp.</Card>
     </div>

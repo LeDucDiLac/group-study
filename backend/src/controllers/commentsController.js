@@ -18,30 +18,26 @@ export async function createComment(req, res) {
     const topic = await Topic.findById(topicId)
     if (!topic) return res.status(404).json({ error: 'Chủ đề không tồn tại' })
     const submission = topic.submissions.id(submissionId)
-    if (!submission) return res.status(404).json({ error: 'Bài nộp không tồn tại' })``
+    if (!submission) return res.status(404).json({ error: 'Bài nộp không tồn tại' })
     const parentComment = submission.comments.id(commentId)
     if (!parentComment) return res.status(404).json({ error: 'Bình luận không tồn tại' })
-    parentComment.subComments.push({
-      content,
-      createdBy: userId,
-    })
+    parentComment.subcomments.push({ content, userId })
     await topic.save()
     await addPointsForTopicComment({ topicOwnerId: topic.createdBy, actorId: userId })
-    await createCommentNotifications(userId, parentComment.subComments[parentComment.subComments.length - 1]._id, content)
-    return res.json({ comment: parentComment.subComments[parentComment.subComments.length - 1] })
+    const newSubComment = parentComment.subcomments[parentComment.subcomments.length - 1]
+    await createCommentNotifications({ userId, commentId: String(newSubComment._id), content })
+    return res.json({ comment: newSubComment })
   } else {
     // Bình luận vào submission
     const topic = await Topic.findById(topicId)
     if (!topic) return res.status(404).json({ error: 'Chủ đề không tồn tại' })
     const submission = topic.submissions.id(submissionId)
     if (!submission) return res.status(404).json({ error: 'Bài nộp không tồn tại' })
-    submission.comments.push({
-      content,
-      createdBy: userId,
-    })
+    submission.comments.push({ content, userId })
     await topic.save()
     await addPointsForTopicComment({ topicOwnerId: topic.createdBy, actorId: userId })
-    await createCommentNotifications(userId, submission.comments[submission.comments.length - 1]._id, content)
-    return res.json({ comment: submission.comments[submission.comments.length - 1] })
+    const newComment = submission.comments[submission.comments.length - 1]
+    await createCommentNotifications({ userId, commentId: String(newComment._id), content })
+    return res.json({ comment: newComment })
   }
 }

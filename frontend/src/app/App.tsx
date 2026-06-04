@@ -4,9 +4,9 @@ import { Icon } from '@/components/ui'
 import { AdminLayout } from '@/layouts/AdminLayout'
 import { LearnerLayout } from '@/layouts/LearnerLayout'
 import { PublicLayout } from '@/layouts/PublicLayout'
-import { AdminDashboardPage, AdminLoginPage, AdminPendingPage, AdminReviewPage, AdminTopicDetailPage, AdminTopicsPage, AdminUserDetailPage, AdminUsersPage } from '@/pages/admin/AdminPages'
+import { AdminPage, AdminRedirect } from '@/pages/admin/AdminPages'
 import { BookmarkPage, CalendarPage, CommunityInsightPage, NotificationDetailPage, NotificationsPage, PeerDetailPage, PeerLearningPage, ProfilePage } from '@/pages/learner/CommunityPages'
-import { LearnPage, MySubmissionPage, SubmitSuccessPage } from '@/pages/learner/LearnPages'
+import { LearnPage, MySubmissionPage } from '@/pages/learner/LearnPages'
 import { CreateTopicPage, TopicDetailPage, TopicPendingPage, TopicsPage } from '@/pages/learner/TopicPages'
 import { ForgotPasswordPage, LandingPage, LoginPage, PublicTopicsPage } from '@/pages/public/PublicPages'
 import { authService } from '@/services/api'
@@ -29,7 +29,6 @@ export function App() {
         <Route path="/topics/:id" element={<TopicDetailPage />} />
         <Route path="/topics/:id/pending" element={<TopicPendingPage />} />
         <Route path="/topics/:id/learn" element={<LearnPage />} />
-        <Route path="/topics/:id/success" element={<SubmitSuccessPage />} />
         <Route path="/topics/:id/my-submission" element={<MySubmissionPage />} />
         <Route path="/topics/:id/peer" element={<PeerLearningPage />} />
         <Route path="/topics/:id/peer/:submissionId" element={<PeerDetailPage />} />
@@ -41,16 +40,8 @@ export function App() {
         <Route path="/insights" element={<CommunityInsightPage />} />
       </Route>
 
-      <Route path="/admin/login" element={<AdminLoginPage />} />
-      <Route path="/admin" element={<RequireAuth role="admin"><AdminLayout /></RequireAuth>}>
-        <Route index element={<Navigate to="/admin/dashboard" replace />} />
-        <Route path="dashboard" element={<AdminDashboardPage />} />
-        <Route path="topics/pending" element={<AdminPendingPage />} />
-        <Route path="topics/pending/:id" element={<AdminReviewPage />} />
-        <Route path="topics" element={<AdminTopicsPage />} />
-        <Route path="topics/:id" element={<AdminTopicDetailPage />} />
-        <Route path="users" element={<AdminUsersPage />} />
-        <Route path="users/:id" element={<AdminUserDetailPage />} />
+      <Route path="/admin" element={<RequireAuth role="admin"><AdminPage /></RequireAuth>}>
+        <Route index element={<AdminPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
@@ -87,7 +78,7 @@ function RequireAuth({ children, role }: { children: ReactNode; role?: User['rol
   }
 
   if (!user) {
-    return <Navigate to={role === 'admin' ? '/admin/login' : '/login'} replace state={{ from: location.pathname }} />
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />
   }
 
   if (role && user.role !== role) {
@@ -125,7 +116,7 @@ function AdminAccessDenied({ user }: { user: User }) {
           <span className="inline-flex min-w-0 items-center gap-2 rounded-full border border-border bg-white/90 px-3 py-2 text-xs font-bold text-ink-muted shadow-sm">
             <Icon name="user" size={14} className="shrink-0 text-secondary-container" />
             <span className="hidden sm:inline">Phiên hiện tại:</span>
-            <span className="max-w-[180px] truncate text-primary-container">{user.name}</span>
+            <span className="max-w-[180px] truncate text-primary-container">{user.displayName}</span>
           </span>
         </div>
       </header>
@@ -202,7 +193,7 @@ function CurrentUserCard({ user }: { user: User }) {
           <Icon name="user" size={25} />
         </div>
         <div className="min-w-0">
-          <p className="truncate text-base font-extrabold text-primary-container">{user.name}</p>
+          <p className="truncate text-base font-extrabold text-primary-container">{user.displayName}</p>
           <p className="mt-1 truncate text-sm font-semibold text-ink-subtle">{user.email}</p>
         </div>
       </div>

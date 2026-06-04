@@ -17,7 +17,7 @@ test.describe('topics and learning workflow', () => {
 
   test('topic status tabs can show pending topics', async ({ page }) => {
     await page.goto('/topics')
-    await page.getByRole('button', { name: 'Chờ duyệt' }).click()
+    await page.getByRole('button', { name: 'Chưa duyệt' }).click()
 
     await expect(page.getByText('Cấu Trúc Dữ Liệu - Stack và Queue')).toBeVisible()
     await expectNoMojibake(page)
@@ -45,7 +45,7 @@ test.describe('topics and learning workflow', () => {
   test('pending topic detail blocks learning', async ({ page }) => {
     await page.goto('/topics/10000000-0000-0000-0000-000000000004')
 
-    await expect(page.getByText('Đề xuất đang chờ duyệt').first()).toBeVisible()
+    await expect(page.getByText('Đề xuất đang chưa duyệt').first()).toBeVisible()
     await expect(page.getByText(/Chưa thể bắt đầu học|Đang chờ admin duyệt/).first()).toBeVisible()
     await expectNoMojibake(page)
   })

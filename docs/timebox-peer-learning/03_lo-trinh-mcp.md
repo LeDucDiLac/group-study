@@ -94,7 +94,7 @@
 **Admin-facing:**
 - [ ] `/admin/login` — Đăng nhập riêng cho Admin
 - [ ] `/admin/dashboard` — Tổng quan hệ thống
-- [ ] `/admin/topics/pending` — Danh sách chủ đề chờ duyệt
+- [ ] `/admin/topics/pending` — Danh sách chủ đề chưa duyệt
 - [ ] `/admin/topics/pending/:id` — Chi tiết + Duyệt / Từ chối
 - [ ] `/admin/topics` — Quản lý toàn bộ chủ đề
 

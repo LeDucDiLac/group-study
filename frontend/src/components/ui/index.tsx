@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from 'react'
+import { useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from 'react'
 import { Link } from 'react-router-dom'
 import { cn } from '@/utils/format'
 
@@ -14,6 +14,9 @@ type IconName =
   | 'download'
   | 'file'
   | 'heart'
+  | 'brokenHeart'
+  | 'liked'
+  | 'disliked'
   | 'eye'
   | 'eyeOff'
   | 'lock'
@@ -28,6 +31,7 @@ type IconName =
   | 'upload'
   | 'user'
   | 'users'
+  | 'link'
 
 const paths: Record<IconName, ReactNode> = {
   arrowLeft: <path d="M15 18l-6-6 6-6M9 12h12" />,
@@ -41,6 +45,19 @@ const paths: Record<IconName, ReactNode> = {
   download: <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />,
   file: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /></>,
   heart: <path d="M20.8 5.6a5.1 5.1 0 0 0-7.2 0L12 7.2l-1.6-1.6a5.1 5.1 0 1 0-7.2 7.2L12 21.5l8.8-8.7a5.1 5.1 0 0 0 0-7.2Z" />,
+  brokenHeart:
+    <svg viewBox="0 0 24 24">
+      <path d="M12 21.5L3.2 12.8a5.1 5.1 0 0 1 7.2-7.2L12 7.2V21.5Z" />
+      <path d="M12 21.5l8.8-8.7a5.1 5.1 0 0 0-7.2-7.2L12 7.2V21.5Z" />
+      <path d="M12 7.2l-1 2 2 2-2 2 2 2-1 2" stroke="currentColor" strokeWidth="1.5" fill="none" />
+    </svg>,
+  liked: <path d="M20.8 5.6a5.1 5.1 0 0 0-7.2 0L12 7.2l-1.6-1.6a5.1 5.1 0 1 0-7.2 7.2L12 21.5l8.8-8.7a5.1 5.1 0 0 0 0-7.2Z" fill="#dc2626" />,
+  disliked:
+    <svg viewBox="0 0 24 24" fill="#71717a">
+      <path d="M12 21.5L3.2 12.8a5.1 5.1 0 0 1 7.2-7.2L12 7.2V21.5Z" />
+      <path d="M12 21.5l8.8-8.7a5.1 5.1 0 0 0-7.2-7.2L12 7.2V21.5Z" />
+      <path d="M12 7.2l-1 2 2 2-2 2 2 2-1 2" stroke="#FFFFFF" strokeWidth="2" fill="none" />
+    </svg>,
   eye: <><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></>,
   eyeOff: <><path d="M3 3l18 18M10.6 10.6A3 3 0 0 0 14 14M7.4 7.5C4 9.1 2 12 2 12s3.5 6 10 6c1.5 0 2.8-.3 4-.8M12.8 6.1C18.8 6.6 22 12 22 12s-.9 1.6-2.6 3.1" /></>,
   lock: <><rect x="4" y="10" width="16" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></>,
@@ -55,6 +72,7 @@ const paths: Record<IconName, ReactNode> = {
   upload: <path d="M12 16V4M7 9l5-5 5 5M5 20h14" />,
   user: <><path d="M20 21a8 8 0 0 0-16 0" /><circle cx="12" cy="7" r="4" /></>,
   users: <><path d="M16 21a6 6 0 0 0-12 0M22 21a5.5 5.5 0 0 0-6-5.5" /><circle cx="10" cy="7" r="4" /><path d="M18 4.5a3 3 0 0 1 0 6" /></>,
+  link: <><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></>,
 }
 
 export function Icon({ name, size = 18, className = '' }: { name: IconName; size?: number; className?: string }) {
@@ -116,9 +134,27 @@ export function Badge({ children, tone = 'neutral', className = '' }: { children
   return <span className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap', tones[tone], className)}>{children}</span>
 }
 
-export function Avatar({ name, anonymous = false, size = 'md' }: { name: string; anonymous?: boolean; size?: 'sm' | 'md' | 'lg' }) {
-  const initials = anonymous ? '?' : name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()
+export function Avatar({ name, anonymous = false, size = 'md', userId }: { name?: string; anonymous?: boolean; size?: 'sm' | 'md' | 'lg'; userId?: string }) {
+  const [imgFailed, setImgFailed] = useState(false)
+  const initials = anonymous ? '?' : (name ?? '').split(' ').filter(Boolean).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || '?'
   const sizes = { sm: 'h-8 w-8 text-xs', md: 'h-10 w-10 text-sm', lg: 'h-14 w-14 text-base' }
+  
+  const backendUrl = import.meta.env.VITE_API_URL || ''
+  // Clean up any double slashes at the root of the URL if needed, but since we append /api/..., we just need to ensure trailing slash handles
+  const baseUrlClean = backendUrl.endsWith('/') ? backendUrl.slice(0, -1) : backendUrl
+  const avatarUrl = userId && !anonymous ? `${baseUrlClean}/api/profiles/${userId}/avatar` : null
+
+  if (avatarUrl && !imgFailed) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={name || 'Avatar'}
+        onError={() => setImgFailed(true)}
+        className={cn('shrink-0 rounded-full object-cover border border-border bg-surface-low', sizes[size])}
+      />
+    )
+  }
+
   return <div className={cn('flex shrink-0 items-center justify-center rounded-full font-bold', anonymous ? 'bg-surface-container text-ink-muted' : 'bg-primary text-white', sizes[size])}>{initials}</div>
 }
 

@@ -5,7 +5,7 @@ import NotificationService from '../services/notificationService.js'
 export async function getNotifications(req, res) {
     const userId = String(req.user._id)
     try {
-        const notifications = await Notification.find({ user: userId }).sort({ createdAt: -1 }).lean()
+        const notifications = await Notification.find({ userId }).sort({ createdAt: -1 }).lean()
         res.json(notifications)
     } catch (error) {
         res.status(500).json({ error: 'Lỗi khi lấy thông báo' })
@@ -15,7 +15,7 @@ export async function getNotifications(req, res) {
 export async function markAllRead(req, res) {
     const userId = String(req.user._id)
     try {
-        await Notification.updateMany({ user: userId, read: false }, { read: true })
+        await Notification.updateMany({ userId, isRead: false }, { isRead: true })
         res.json({ success: true })
     } catch (error) {
         res.status(500).json({ error: 'Lỗi khi đánh dấu đã đọc' })
@@ -27,7 +27,11 @@ export async function markAsRead(req, res) {
     const { notificationId } = req.body
     if (!notificationId) return res.status(400).json({ error: 'Thiếu mã thông báo' })
     try {
-        const notification = await Notification.findOneAndUpdate({ _id: notificationId, user: userId }, { read: true }, { new: true })  
+        const notification = await Notification.findOneAndUpdate(
+            { _id: notificationId, userId },
+            { isRead: true },
+            { new: true }
+        )
         if (!notification) return res.status(404).json({ error: 'Không tìm thấy thông báo' })
         res.json({ success: true })
     } catch (error) {

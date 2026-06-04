@@ -44,7 +44,7 @@ test.describe('secondary learner and admin workflows', () => {
     await page.goto('/admin/dashboard')
 
     await expect(page.getByRole('heading', { name: 'Admin Dashboard' })).toBeVisible()
-    await expect(page.getByText(/Chờ duyệt|Đang mở|Bài nộp|Người dùng/).first()).toBeVisible()
+    await expect(page.getByText(/Chưa duyệt|Đang mở|Bài nộp|Người dùng/).first()).toBeVisible()
     await expectNoMojibake(page)
   })
 
@@ -52,7 +52,7 @@ test.describe('secondary learner and admin workflows', () => {
     await login(page, admin)
     await page.goto('/admin/topics/pending')
 
-    await expect(page.getByRole('heading', { name: /Danh sách chờ duyệt/ })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /Danh sách chưa duyệt/ })).toBeVisible()
     await expect(page.getByText('Cấu Trúc Dữ Liệu - Stack và Queue')).toBeVisible()
     await expectNoMojibake(page)
   })

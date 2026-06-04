@@ -177,7 +177,7 @@
     ↓
 [Dashboard Admin] — Tổng quan hệ thống
     ↓
-[Duyệt chủ đề] — Danh sách chủ đề chờ duyệt → Xem chi tiết → Phê duyệt / Từ chối
+[Duyệt chủ đề] — Danh sách chủ đề chưa duyệt → Xem chi tiết → Phê duyệt / Từ chối
     ↓
 [Quản lý chủ đề] — Xem toàn bộ chủ đề đang hoạt động, chỉnh sửa, đóng
     ↓
@@ -188,9 +188,9 @@
 
 | Màn hình | Mô tả | Độ ưu tiên |
 |----------|-------|------------|
-| **Admin Dashboard** | Tổng quan: số chủ đề chờ duyệt, tổng user, tổng bài nộp hôm nay | 🔴 Cao |
-| **Danh sách chờ duyệt** | Table: Tên chủ đề, Người tạo, Thời gian, Nút Duyệt/Từ chối | 🔴 Cao |
-| **Chi tiết chủ đề cần duyệt** | Xem full thông tin, tài liệu đính kèm, lý do đề xuất, form từ chối | 🔴 Cao |
+| **Admin Dashboard** | Tổng quan: số chủ đề chưa duyệt, tổng user, tổng bài nộp hôm nay | 🔴 Cao |
+| **Danh sách chưa duyệt** | Table: Tên chủ đề, Người tạo, Thời gian, Nút Duyệt/Từ chối | 🔴 Cao |
+| **Chi tiết chủ đề chưa duyệt** | Xem full thông tin, tài liệu đính kèm, lý do đề xuất, form từ chối | 🔴 Cao |
 | **Quản lý chủ đề** | Table toàn bộ chủ đề, filter, search, nút Đóng/Ẩn | 🟡 Trung bình |
 | **Quản lý người dùng** | Table user, khoá/mở tài khoản | 🟢 Thấp (V2) |
 
@@ -236,11 +236,10 @@
 ### 4.11 Màn hình Quản lý chủ đề của tôi (`screen: Quản lý chủ đề`)
 - **Mục đích**: Thống kê và quản lý các chủ đề do người dùng đã tạo
 - **Thành phần UI**:
-    - Bộ lọc: Tất cả / Chờ duyệt / Đã duyệt / Bị từ chối / Đã hoàn thành
     - Danh sách card hoặc bảng: Tên chủ đề, Ngày tạo, Trạng thái, Số người tham gia, Số bài nộp, Số comment
-    - Quick actions: "Xem chi tiết", "Chỉnh sửa" (trạng thái chờ duyệt), "Hoàn thành" (trạng thái đã duyệt)
+    - Quick actions: "Xem chi tiết", "Chỉnh sửa" (trạng thái chưa duyệt), "Hoàn thành" (trạng thái đã duyệt)
 - **Quy tắc nghiệp vụ**:
-    - Chủ đề ở trạng thái **chờ duyệt** mới được chỉnh sửa
+    - Chủ đề ở trạng thái **chưa duyệt** mới được chỉnh sửa
     - Khi được phê duyệt, nút "Chỉnh sửa" chuyển thành "Hoàn thành"
     - Khi bị từ chối, hiển thị lý do từ Admin
 

@@ -118,7 +118,6 @@ describe('P0 source guards for core learner workflow', () => {
       'getDraft',
       'getSubmissionsByTopic',
       'getSubmission',
-      'getMySubmission',
       'getComments',
       'getNotifications',
       'getNotification',

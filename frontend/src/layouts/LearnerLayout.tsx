@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { Avatar, Badge, Button, Icon } from '@/components/ui'
-import { authService, userService } from '@/services/api'
+import { authService } from '@/services/api'
 import type { User } from '@/types/domain'
-import { BADGE_LABELS } from '@/utils/badges'
+import { RANK_LABELS } from '@/utils/badges'
 import { cn } from '@/utils/format'
 import { useAsync } from '@/utils/hooks'
 
@@ -17,21 +17,16 @@ const nav = [
 
 const fallbackLearner: User = {
   id: 'loading',
-  name: 'Người học',
+  displayName: 'Người học',
   email: '',
   role: 'learner',
-  status: 'active',
-  interests: [],
-  joinedTopicIds: [],
-  submissionIds: [],
-  createdTopicIds: [],
-  badgeStats: { answerCount: 0, answerLikeCount: 0, level: 'newcomer' },
+  rank: 0,
 }
 
 export function LearnerLayout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const { data: user } = useAsync(() => userService.getCurrentUser(), fallbackLearner)
-  const badgeLabel = user.role === 'admin' ? 'Admin' : BADGE_LABELS[user.badgeStats.level]
+  const { data: user } = useAsync(() => authService.getSessionUser().then(u => u ?? fallbackLearner), fallbackLearner)
+  const badgeLabel = user.role === 'admin' ? 'Admin' : RANK_LABELS[Math.floor(user.rank / 100)]
   const navigate = useNavigate()
 
   const handleLogout = async () => {
@@ -59,8 +54,7 @@ export function LearnerLayout() {
                 key={item.to}
                 to={item.to}
                 className={({ isActive }) =>
-                  `rounded-md px-3 py-2 text-sm font-semibold transition whitespace-nowrap ${
-                    isActive ? 'bg-secondary-fixed text-secondary-container' : 'text-ink-muted hover:bg-surface-low hover:text-ink'
+                  `rounded-md px-3 py-2 text-sm font-semibold transition whitespace-nowrap ${isActive ? 'bg-secondary-fixed text-secondary-container' : 'text-ink-muted hover:bg-surface-low hover:text-ink'
                   }`
                 }
               >
@@ -71,14 +65,14 @@ export function LearnerLayout() {
 
           <div className="relative flex items-center gap-3">
             <Badge tone={user.role === 'admin' ? 'brand' : 'success'} className="hidden sm:inline-flex">
-              {user.role === 'admin' ? 'Admin' : 'Người học'} / {badgeLabel}
+              {user.role === 'admin' ? 'Admin' : 'Người học'}
             </Badge>
             <Link
               to="/profile"
               className="hidden h-10 items-center gap-2 rounded-md bg-white px-2.5 shadow-sm transition hover:bg-surface-low sm:flex"
               aria-label="Hồ sơ cá nhân"
             >
-              <Avatar name={user.name} size="sm" />
+              <Avatar name={user.displayName} size="sm" />
             </Link>
             <button
               type="button"
@@ -131,8 +125,7 @@ export function LearnerLayout() {
               to={item.to}
               onClick={() => setMobileMenuOpen(false)}
               className={({ isActive }) =>
-                `rounded-md px-4 py-3 text-sm font-semibold transition ${
-                  isActive ? 'bg-secondary-fixed text-secondary-container' : 'text-ink-muted hover:bg-surface-low hover:text-ink'
+                `rounded-md px-4 py-3 text-sm font-semibold transition ${isActive ? 'bg-secondary-fixed text-secondary-container' : 'text-ink-muted hover:bg-surface-low hover:text-ink'
                 }`
               }
             >
@@ -141,9 +134,9 @@ export function LearnerLayout() {
           ))}
           <hr className="my-4 border-border-subtle" />
           <Link to="/profile" className="mt-auto flex items-center gap-3 rounded-md p-3 transition hover:bg-surface-low" onClick={() => setMobileMenuOpen(false)}>
-            <Avatar name={user.name} size="sm" />
+            <Avatar name={user.displayName} size="sm" />
             <div className="min-w-0 flex-1 text-left">
-              <p className="truncate text-sm font-bold text-ink">{user.name}</p>
+              <p className="truncate text-sm font-bold text-ink">{user.displayName}</p>
               <p className="truncate text-xs font-semibold text-secondary-container">
                 {user.role === 'admin' ? 'Admin' : 'Người học'} / {badgeLabel}
               </p>

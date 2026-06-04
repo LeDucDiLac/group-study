@@ -1,13 +1,15 @@
 import User from '../models/User.js'
 import ProfileService from '../services/profileService.js'
 import { getRecentActivities } from '../services/recentActivityService.js'
+import fs from 'fs'
+import path from 'path'
 
 export async function getProfile(req, res) {
     const { userId } = req.params
     const user = await User.findById(userId).select('-password')
     if (!user) return res.status(404).json({ error: 'Không tìm thấy người dùng' })
     // Lấy thêm thông tin topic đã tham gia và đã tạo 
-    const [topicsParticipated, topicsCreated] = [len(await ProfileService.fetchTopicsParticipated(userId)), len(await ProfileService.fetchTopicsCreated(userId))]
+    const [topicsParticipated, topicsCreated] = [(await ProfileService.fetchTopicsParticipated(userId)).length, (await ProfileService.fetchTopicsCreated(userId)).length]
     
     // Chuyển subbmissions và liked thành số lượng
     const submissionsCount = Array.isArray(user.summary?.submissions) ? user.summary.submissions.length : 0
@@ -59,10 +61,8 @@ export async function updateAvatar(req, res) {
     if (!req.file) return res.status(400).json({ error: 'Không tải lên được ảnh' })
 
     // Chuyển ảnh từ thư mục tạm sang thư mục chính, ghi đè nếu đã có ảnh cũ
-    const fs = require('fs')
-    const path = require('path')
     const avatarDir = path.join(process.cwd(), 'uploads/avatars/')
-    const finalPath = path.join(avatarDir``, `${userId}${path.extname(req.file.originalname)}`)
+    const finalPath = path.join(avatarDir, `${userId}${path.extname(req.file.originalname)}`)
     
     // Kiểm tra và tạo thư mục nếu chưa tồn tại
     if (!fs.existsSync(avatarDir)) {

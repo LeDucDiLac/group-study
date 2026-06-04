@@ -1,37 +1,37 @@
 import { describe, expect, it } from 'vitest'
-import { BADGE_LABELS, calculateBadgeLevel, getNextBadgeProgress } from './badges'
+import { RANK_LABELS, getRankTier, getRankProgress } from './badges'
 
-describe('badge reputation thresholds', () => {
-  it('maps answer/comment-like totals to the expected badge level', () => {
-    expect(calculateBadgeLevel(0, 0)).toBe('newcomer')
-    expect(calculateBadgeLevel(4, 100)).toBe('newcomer')
-    expect(calculateBadgeLevel(5, 9)).toBe('newcomer')
-    expect(calculateBadgeLevel(5, 10)).toBe('helper')
-    expect(calculateBadgeLevel(19, 100)).toBe('helper')
-    expect(calculateBadgeLevel(20, 50)).toBe('mentor')
-    expect(calculateBadgeLevel(49, 200)).toBe('mentor')
-    expect(calculateBadgeLevel(50, 150)).toBe('expert')
+describe('rank reputation thresholds', () => {
+  it('maps points to the expected rank tier index', () => {
+    expect(getRankTier(0)).toBe(0)
+    expect(getRankTier(50)).toBe(0)
+    expect(getRankTier(100)).toBe(1)
+    expect(getRankTier(345)).toBe(3)
+    expect(getRankTier(899)).toBe(8)
+    expect(getRankTier(900)).toBe(9)
+    expect(getRankTier(1200)).toBe(9)
   })
 
   it('keeps Vietnamese UI labels readable', () => {
-    expect(BADGE_LABELS).toEqual({
-      newcomer: 'Tân Binh Tri Thức',
-      helper: 'Trợ Thủ Tri Thức',
-      mentor: 'Dẫn Lối Tri Thức',
-      expert: 'Bậc Thầy Cộng Đồng',
-    })
+    expect(RANK_LABELS[0]).toBe('Tập sự')
+    expect(RANK_LABELS[1]).toBe('Tân binh')
+    expect(RANK_LABELS[9]).toBe('Thách đấu')
   })
 
-  it('computes next badge progress from the next threshold', () => {
-    const progress = getNextBadgeProgress({
-      answerCount: 18,
-      answerLikeCount: 74,
-      level: 'helper',
-    })
+  it('computes rank progress from current points', () => {
+    const progressNormal = getRankProgress(345)
+    expect(progressNormal.percent).toBe(45)
+    expect(progressNormal.remaining).toBe(55)
+    expect(progressNormal.label).toContain('Cần thêm 55 điểm để đạt Tinh anh')
 
-    expect(progress.remainingAnswers).toBe(2)
-    expect(progress.remainingLikes).toBe(0)
-    expect(progress.percent).toBeGreaterThan(90)
-    expect(progress.label).toContain('Dẫn Lối Tri Thức')
+    const progressSpecial = getRankProgress(945)
+    expect(progressSpecial.percent).toBe(45)
+    expect(progressSpecial.remaining).toBe(55)
+    expect(progressSpecial.label).toContain('Cần thêm 55 điểm để đạt cấp cao nhất')
+
+    const progressMax = getRankProgress(1050)
+    expect(progressMax.percent).toBe(100)
+    expect(progressMax.remaining).toBe(0)
+    expect(progressMax.label).toContain('Bạn đã đạt cấp cao nhất')
   })
 })

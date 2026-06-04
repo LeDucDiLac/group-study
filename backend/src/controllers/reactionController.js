@@ -1,35 +1,31 @@
-import { placeholder } from '../utils/placeholder.js'
 import Topic from '../models/Topic.js'
 import { addPointsForTopicLike, addPointsForSubmissionLike, addPointsForCommentLike, removePointsForCommentLikeCancellation, removePointsForSubmissionLikeCancellation, removePointsForTopicLikeCancellation } from '../services/rankService.js'
 import { incLikesReceived, decLikesReceived, addLikedItem, removeLikedItem } from '../services/profileService.js'
 
 export async function like(req, res) {
     const userId = String(req.user._id)
-    const { topicId, submissionId, commentId, subCommentId } = req.body || {}
+    const { id } = req.body || {}
 
-    if (!topicId) 
-        return res.status(400).json({ error: 'Thiếu thông tin chủ đề' })
+    if (!id) return res.status(400).json({ error: 'Thiếu thông tin id' })
 
-    const topic = await Topic.findById(topicId)
-    if (!topic) return res.status(404).json({ error: 'Chủ đề không tồn tại' })
-    if (submissionId) {
-        const submission = topic.submissions.id(submissionId)
-        if (!submission) return res.status(404).json({ error: 'Bài nộp không tồn tại' })
-        if (commentId) {
-            const comment = submission.comments.id(commentId)
-            if (!comment) return res.status(404).json({ error: 'Bình luận không tồn tại' })
-            if (subCommentId) {
-                const subComment = comment.subComments.id(subCommentId)
-                if (!subComment) return res.status(404).json({ error: 'Bình luận không tồn tại' })
+    const target = await Topic.findTargetById(id)
+    if (!target) return res.status(404).json({ error: 'Không tìm thấy đối tượng' })
+    const topic = await Topic.findById(target.topicId)
+    if (target.submissionId != null) {
+        const submission = topic.submissions.id(target.submissionId)
+        if (target.commentId != null) {
+            const comment = submission.comments.id(target.commentId)
+            if (target.subCommentId != null) {
+                const subComment = comment.subComments.id(target.subCommentId)
                 if (subComment.reactions.like.includes(userId)) {
                     return res.status(400).json({ error: 'Bạn đã thích bình luận này' })
                 }
                 subComment.reactions.like.push(userId)
                 // Remove dislike if exists
                 subComment.reactions.dislike = subComment.reactions.dislike.filter(id => String(id) !== userId)
-                await addPointsForCommentLike({ commentOwnerId: subComment.ownerId, actorId: userId })
-                incLikesReceived(subComment.ownerId)
-                await addLikedItem(userId, { topicId, submissionId, commentId, subCommentId })
+                await addPointsForCommentLike({ commentOwnerId: subComment.userId, actorId: userId })
+                incLikesReceived(subComment.userId)
+                await addLikedItem(userId, { topicId: topic._id, submissionId: submission._id, commentId: comment._id, subCommentId: subComment._id })
             } else {
                 if (comment.reactions.like.includes(userId)) {
                     return res.status(400).json({ error: 'Bạn đã thích bình luận này' })
@@ -37,9 +33,9 @@ export async function like(req, res) {
                 comment.reactions.like.push(userId)
                 // Remove dislike if exists
                 comment.reactions.dislike = comment.reactions.dislike.filter(id => String(id) !== userId)
-                await addPointsForCommentLike({ commentOwnerId: comment.ownerId, actorId: userId })
-                incLikesReceived(comment.ownerId)
-                await addLikedItem(userId, { topicId, submissionId, commentId, subCommentId })
+                await addPointsForCommentLike({ commentOwnerId: comment.userId, actorId: userId })
+                incLikesReceived(comment.userId)
+                await addLikedItem(userId, { topicId: topic._id, submissionId: submission._id, commentId: comment._id, subCommentId: null })
             }
         } else {
             if (submission.reactions.like.includes(userId)) {
@@ -48,9 +44,9 @@ export async function like(req, res) {
             submission.reactions.like.push(userId)
             // Remove dislike if exists
             submission.reactions.dislike = submission.reactions.dislike.filter(id => String(id) !== userId)
-            await addPointsForSubmissionLike({ submissionOwnerId: submission.ownerId, actorId: userId })
-            incLikesReceived(submission.ownerId)
-            await addLikedItem(userId, { topicId, submissionId, commentId, subCommentId })
+            await addPointsForSubmissionLike({ submissionOwnerId: submission.userId, actorId: userId })
+            incLikesReceived(submission.userId)
+            await addLikedItem(userId, { topicId: topic._id, submissionId: submission._id, commentId: null, subCommentId: null })
         }
     } else {
         if (topic.reactions.like.includes(userId)) {
@@ -59,9 +55,9 @@ export async function like(req, res) {
         topic.reactions.like.push(userId)
         // Remove dislike if exists
         topic.reactions.dislike = topic.reactions.dislike.filter(id => String(id) !== userId)
-        await addPointsForTopicLike({ topicOwnerId: topic.ownerId, actorId: userId })
-        incLikesReceived(topic.ownerId)
-        await addLikedItem(userId, { topicId, submissionId, commentId, subCommentId })
+        await addPointsForTopicLike({ topicOwnerId: topic.createdBy, actorId: userId })
+        incLikesReceived(topic.userId)
+        await addLikedItem(userId, { topicId: topic._id, submissionId: null, commentId: null, subCommentId: null })
     }
 
     await topic.save()
@@ -70,22 +66,17 @@ export async function like(req, res) {
 
 export async function dislike(req, res) {
     const userId = String(req.user._id)
-    const { topicId, submissionId, commentId, subCommentId } = req.body || {}
-
-    if (!topicId)
-        return res.status(400).json({ error: 'Thiếu thông tin chủ đề' })
-
-    const topic = await Topic.findById(topicId)
-    if (!topic) return res.status(404).json({ error: 'Chủ đề không tồn tại' })
-    if (submissionId) {
-        const submission = topic.submissions.id(submissionId)
-        if (!submission) return res.status(404).json({ error: 'Bài nộp không tồn tại' })
-        if (commentId) {
-            const comment = submission.comments.id(commentId)
-            if (!comment) return res.status(404).json({ error: 'Bình luận không tồn tại' })
-            if (subCommentId) {
-                const subComment = comment.subComments.id(subCommentId)
-                if (!subComment) return res.status(404).json({ error: 'Bình luận không tồn tại' })
+    const { id } = req.body || {}
+    if (!id) return res.status(400).json({ error: 'Thiếu thông tin id' })
+    const target = await Topic.findTargetById(id)
+    if (!target) return res.status(404).json({ error: 'Không tìm thấy đối tượng' })
+    const topic = await Topic.findById(target.topicId)
+    if (target.submissionId != null) {
+        const submission = topic.submissions.id(target.submissionId)
+        if (target.commentId != null) {
+            const comment = submission.comments.id(target.commentId)
+            if (target.subCommentId != null) {
+                const subComment = comment.subComments.id(target.subCommentId)
                 if (subComment.reactions.dislike.includes(userId)) {
                     return res.status(400).json({ error: 'Bạn đã không thích bình luận này' })
                 }
@@ -93,9 +84,9 @@ export async function dislike(req, res) {
                 // Remove like if exists
                 if (subComment.reactions.like.includes(userId)) {
                     subComment.reactions.like = subComment.reactions.like.filter(id => String(id) !== userId)
-                    await removePointsForCommentLikeCancellation({ commentOwnerId: subComment.ownerId, actorId: userId })
-                    await decLikesReceived(subComment.ownerId)
-                    await removeLikedItem(userId, { topicId, submissionId, commentId, subCommentId })
+                    await removePointsForCommentLikeCancellation({ commentOwnerId: subComment.userId, actorId: userId })
+                    await decLikesReceived(subComment.userId)
+                    await removeLikedItem(userId, { topicId: topic._id, submissionId: submission._id, commentId: comment._id, subCommentId: subComment._id })
                 }
             } else {
                 if (comment.reactions.dislike.includes(userId)) {
@@ -105,9 +96,9 @@ export async function dislike(req, res) {
                 // Remove like if exists
                 if (comment.reactions.like.includes(userId)) {
                     comment.reactions.like = comment.reactions.like.filter(id => String(id) !== userId)
-                    await removePointsForCommentLikeCancellation({ commentOwnerId: comment.ownerId, actorId: userId })
-                    await decLikesReceived(comment.ownerId)
-                    await removeLikedItem(userId, { topicId, submissionId, commentId, subCommentId })
+                    await removePointsForCommentLikeCancellation({ commentOwnerId: comment.userId, actorId: userId })
+                    await decLikesReceived(comment.userId)
+                    await removeLikedItem(userId, { topicId: topic._id, submissionId: submission._id, commentId: comment._id, subCommentId: null })
                 }
             }
         } else {
@@ -116,10 +107,12 @@ export async function dislike(req, res) {
             }
             submission.reactions.dislike.push(userId)
             // Remove like if exists
-            submission.reactions.like = submission.reactions.like.filter(id => String(id) !== userId)
-            await removePointsForSubmissionLikeCancellation({ submissionOwnerId: submission.ownerId, actorId: userId })
-            await decLikesReceived(submission.ownerId)
-            await removeLikedItem(userId, { topicId, submissionId, commentId, subCommentId })
+            if (submission.reactions.like.includes(userId)) {
+                submission.reactions.like = submission.reactions.like.filter(id => String(id) !== userId)
+                await removePointsForSubmissionLikeCancellation({ submissionOwnerId: submission.userId, actorId: userId })
+                await decLikesReceived(submission.userId)
+                await removeLikedItem(userId, { topicId: topic._id, submissionId: submission._id, commentId: null, subCommentId: null })
+            }
         }
     } else {
         if (topic.reactions.dislike.includes(userId)) {
@@ -129,9 +122,9 @@ export async function dislike(req, res) {
         // Remove like if exists
         if (topic.reactions.like.includes(userId)) {
             topic.reactions.like = topic.reactions.like.filter(id => String(id) !== userId)
-            await removePointsForTopicLikeCancellation({ topicOwnerId: topic.ownerId, actorId: userId })
-            await decLikesReceived(topic.ownerId)
-            await removeLikedItem(userId, { topicId, submissionId, commentId, subCommentId })
+            await removePointsForTopicLikeCancellation({ topicOwnerId: topic.createdBy, actorId: userId })
+            await decLikesReceived(topic.userId)
+            await removeLikedItem(userId, { topicId: topic._id, submissionId: null, commentId: null, subCommentId: null })
         }
     }
 
@@ -141,27 +134,22 @@ export async function dislike(req, res) {
 
 export async function cancelReaction(req, res) {
     const userId = String(req.user._id)
-    const { topicId, submissionId, commentId, subCommentId } = req.body || {}
-
-    if (!topicId)
-        return res.status(400).json({ error: 'Thiếu thông tin chủ đề' })
-
-    const topic = await Topic.findById(topicId)
-    if (!topic) return res.status(404).json({ error: 'Chủ đề không tồn tại' })
-    if (submissionId) {
-        const submission = topic.submissions.id(submissionId)
-        if (!submission) return res.status(404).json({ error: 'Bài nộp không tồn tại' })
-        if (commentId) {
-            const comment = submission.comments.id(commentId)
-            if (!comment) return res.status(404).json({ error: 'Bình luận không tồn tại' })
-            if (subCommentId) {
-                const subComment = comment.subComments.id(subCommentId)
-                if (!subComment) return res.status(404).json({ error: 'Bình luận không tồn tại' })
+    const { id } = req.body || {}
+    if (!id) return res.status(400).json({ error: 'Thiếu thông tin id' })
+    const target = await Topic.findTargetById(id)
+    if (!target) return res.status(404).json({ error: 'Không tìm thấy đối tượng' })
+    const topic = await Topic.findById(target.topicId)
+    if (target.submissionId != null) {
+        const submission = topic.submissions.id(target.submissionId)
+        if (target.commentId != null) {
+            const comment = submission.comments.id(target.commentId)
+            if (target.subCommentId != null) {
+                const subComment = comment.subComments.id(target.subCommentId)
                 if (subComment.reactions.like.includes(userId)) {
                     subComment.reactions.like = subComment.reactions.like.filter(id => String(id) !== userId)
-                    await removePointsForCommentLikeCancellation({ commentOwnerId: subComment.ownerId, actorId: userId })
-                    await decLikesReceived(subComment.ownerId)
-                    await removeLikedItem(userId, { topicId, submissionId, commentId, subCommentId })
+                    await removePointsForCommentLikeCancellation({ commentOwnerId: subComment.userId, actorId: userId })
+                    await decLikesReceived(subComment.userId)
+                    await removeLikedItem(userId, { topicId: topic._id, submissionId: submission._id, commentId: comment._id, subCommentId: subComment._id })
                 } else if (subComment.reactions.dislike.includes(userId)) {
                     subComment.reactions.dislike = subComment.reactions.dislike.filter(id => String(id) !== userId)
                 } else {
@@ -170,9 +158,9 @@ export async function cancelReaction(req, res) {
             } else {
                 if (comment.reactions.like.includes(userId)) {
                     comment.reactions.like = comment.reactions.like.filter(id => String(id) !== userId)
-                    await removePointsForCommentLikeCancellation({ commentOwnerId: comment.ownerId, actorId: userId })
-                    await decLikesReceived(comment.ownerId)
-                    await removeLikedItem(userId, { topicId, submissionId, commentId, subCommentId })
+                    await removePointsForCommentLikeCancellation({ commentOwnerId: comment.userId, actorId: userId })
+                    await decLikesReceived(comment.userId)
+                    await removeLikedItem(userId, { topicId: topic._id, submissionId: submission._id, commentId: comment._id, subCommentId: null })
                 } else if (comment.reactions.dislike.includes(userId)) {
                     comment.reactions.dislike = comment.reactions.dislike.filter(id => String(id) !== userId)
                 } else {
@@ -182,21 +170,21 @@ export async function cancelReaction(req, res) {
         } else {
             if (submission.reactions.like.includes(userId)) {
                 submission.reactions.like = submission.reactions.like.filter(id => String(id) !== userId)
-                await removePointsForSubmissionLikeCancellation({ submissionOwnerId: submission.ownerId, actorId: userId })
-                await decLikesReceived(submission.ownerId)
-                await removeLikedItem(userId, { topicId, submissionId, commentId, subCommentId })
+                await removePointsForSubmissionLikeCancellation({ submissionOwnerId: submission.userId, actorId: userId })
+                await decLikesReceived(submission.userId)
+                await removeLikedItem(userId, { topicId: topic._id, submissionId: submission._id, commentId: null, subCommentId: null })
             } else if (submission.reactions.dislike.includes(userId)) {
                 submission.reactions.dislike = submission.reactions.dislike.filter(id => String(id) !== userId)
             } else {
                 return res.status(400).json({ error: 'Bạn chưa phản ứng với bài nộp này' })
-            }   
+            }
         }
     } else {
         if (topic.reactions.like.includes(userId)) {
             topic.reactions.like = topic.reactions.like.filter(id => String(id) !== userId)
-            await removePointsForTopicLikeCancellation({ topicOwnerId: topic.ownerId, actorId: userId })
-            await decLikesReceived(topic.ownerId)
-            await removeLikedItem(userId, { topicId, submissionId, commentId, subCommentId })
+            await removePointsForTopicLikeCancellation({ topicOwnerId: topic.createdBy, actorId: userId })
+            await decLikesReceived(topic.userId)
+            await removeLikedItem(userId, { topicId: topic._id, submissionId: null, commentId: null, subCommentId: null })
         } else if (topic.reactions.dislike.includes(userId)) {
             topic.reactions.dislike = topic.reactions.dislike.filter(id => String(id) !== userId)
         } else {

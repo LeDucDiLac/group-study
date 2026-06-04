@@ -1,24 +1,37 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+﻿import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Badge, Button, Card, Icon, Modal, PageHeader, ProgressBar, Textarea } from '@/components/ui'
 import { ResourceList } from '@/components/topic/TopicCard'
 import { FileUploadBox } from '@/components/submission/FileUploadBox'
-import { draftService, lookupService, submissionService, topicService } from '@/services/api'
+import { draftService, submissionService, topicService, topicFallback, uploadService } from '@/services/api'
+import type { ResourceFile } from '@/types/domain'
 import { countWords, formatDateTime, minutesToReadable } from '@/utils/format'
 import { useAsync } from '@/utils/hooks'
 
 const maxFiles = 10
-const maxFileBytes = 20 * 1024 * 1024
 
 export function LearnPage() {
   const { id = 't1' } = useParams()
   const navigate = useNavigate()
-  const { data: topic } = useAsync(() => topicService.getTopicById(id), lookupService.getTopic(id), [id])
-  const { data: existingSubmission } = useAsync(() => submissionService.getMySubmission(id), null, [id])
+  const location = useLocation()
+
+  // Nhận participationStartTime và windowHours từ navigation state (truyền từ TopicDetailPage)
+  // Dùng làm giá trị tức thì trước khi getTopicById load xong
+  const navState = location.state as { participationStartTime?: number | null; windowHours?: number } | null
+
+  const { data: topic } = useAsync(() => topicService.getTopicById(id), topicFallback(id), [id])
+
+  // Ưu tiên dùng giá trị từ navigation state (có ngay lập tức),
+  // fallback về topic từ API khi đã load xong
+  const participationStartTime = topic.participationStartTime
+    ?? navState?.participationStartTime
+    ?? null
+  const windowHours = topic.windowHours || navState?.windowHours || 48
   const [understood, setUnderstood] = useState('')
   const [notUnderstood, setNotUnderstood] = useState('')
   const [anonymous, setAnonymous] = useState(false)
-  const [files, setFiles] = useState<File[]>([])
+  const [uploadedFiles, setUploadedFiles] = useState<ResourceFile[]>([])
+  const [uploadError, setUploadError] = useState('')
   const [confirm, setConfirm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [draftStatus, setDraftStatus] = useState('Đang tải bản nháp...')
@@ -27,16 +40,20 @@ export function LearnPage() {
   const [startedAt] = useState(() => Date.now())
   const [now, setNow] = useState(() => Date.now())
   const hasLocalDraftChangesRef = useRef(false)
-  const draftLoadVersionRef = useRef(0)
   const latestDraftValueRef = useRef({ understood: '', notUnderstood: '', anonymous: false })
 
   const words = useMemo(() => countWords(`${understood} ${notUnderstood}`), [notUnderstood, understood])
   const timeSpentSeconds = Math.max(0, Math.round((now - startedAt) / 1000))
-  const remainingMs = topic.closesAt ? new Date(topic.closesAt).getTime() - now : undefined
-  const expired = topic.status !== 'open' || (typeof remainingMs === 'number' && remainingMs <= 0)
-  const warning = !expired && typeof remainingMs === 'number' && remainingMs < topic.windowHours * 60 * 60 * 1000 * 0.2
-  const invalidFiles = files.some((file) => file.size > maxFileBytes)
-  const submitDisabled = expired || submitting || words === 0 || !understood.trim() || !notUnderstood.trim() || invalidFiles || files.length > maxFiles || Boolean(existingSubmission)
+
+  // Tính deadline dựa trên participationStartTime và windowHours từ topic
+  const deadlineMs = participationStartTime
+    ? new Date(participationStartTime).getTime() + windowHours * 60 * 60 * 1000
+    : undefined
+  const remainingMs = typeof deadlineMs === 'number' ? deadlineMs - now : undefined
+
+  const expired = topic.status !== 'Đang mở' || (typeof remainingMs === 'number' && remainingMs <= 0)
+  const warning = !expired && typeof remainingMs === 'number' && remainingMs < windowHours * 60 * 60 * 1000 * 0.2
+  const submitDisabled = expired || submitting || words === 0 || !understood.trim() || !notUnderstood.trim() || uploadedFiles.length > maxFiles
 
   latestDraftValueRef.current = { understood, notUnderstood, anonymous }
 
@@ -45,59 +62,41 @@ export function LearnPage() {
     return () => window.clearInterval(handle)
   }, [])
 
+  // Load draft từ localStorage khi vào trang
   useEffect(() => {
-    let mounted = true
-    const loadVersion = draftLoadVersionRef.current + 1
-    draftLoadVersionRef.current = loadVersion
-    hasLocalDraftChangesRef.current = false
-    setDraftLoaded(false)
-    setDraftStatus('Đang tải bản nháp...')
-
-    draftService.getDraft(id).then((draft) => {
-      if (!mounted || draftLoadVersionRef.current !== loadVersion) return
-      if (draft) {
-        if (!hasLocalDraftChangesRef.current) {
-          setUnderstood(draft.understood)
-          setNotUnderstood(draft.notUnderstood)
-          setAnonymous(draft.isAnonymous)
-        }
-        setDraftStatus(draft.updatedAt ? `Đã khôi phục bản nháp lúc ${formatDateTime(draft.updatedAt)}` : 'Đã khôi phục bản nháp')
-      } else {
-        setDraftStatus('Chưa có bản nháp')
-      }
-      setDraftLoaded(true)
-    }).catch(() => {
-      if (!mounted || draftLoadVersionRef.current !== loadVersion) return
-      setDraftStatus('Chưa tải được bản nháp')
-      setDraftLoaded(true)
-    })
-    return () => {
-      mounted = false
+    const draft = draftService.getDraft(id)
+    if (draft) {
+      setUnderstood(draft.understood)
+      setNotUnderstood(draft.notUnderstood)
+      setAnonymous(draft.isAnonymous)
+      setDraftStatus(draft.updatedAt ? `Đã khôi phục bản nháp lúc ${formatDateTime(draft.updatedAt)}` : 'Đã khôi phục bản nháp')
+    } else {
+      setDraftStatus('Chưa có bản nháp')
     }
+    setDraftLoaded(true)
   }, [id])
 
+  // Autosave draft vào localStorage sau 900ms debounce
   useEffect(() => {
-    if (!draftLoaded || existingSubmission || expired || !hasLocalDraftChangesRef.current) return
+    if (!draftLoaded || expired) return
     const handle = window.setTimeout(() => {
       if (!understood.trim() && !notUnderstood.trim()) return
+      if (!hasLocalDraftChangesRef.current) return
       const payload = { understood, notUnderstood, isAnonymous: anonymous, timeSpentSeconds: Math.max(0, Math.round((Date.now() - startedAt) / 1000)) }
       setDraftStatus('Đang lưu bản nháp...')
-      draftService.saveDraft(id, payload)
-        .then((draft) => {
-          const latestDraft = latestDraftValueRef.current
-          if (
-            latestDraft.understood === payload.understood
-            && latestDraft.notUnderstood === payload.notUnderstood
-            && latestDraft.anonymous === payload.isAnonymous
-          ) {
-            hasLocalDraftChangesRef.current = false
-          }
-          setDraftStatus(draft.updatedAt ? `Đã lưu lúc ${formatDateTime(draft.updatedAt)}` : 'Đã lưu bản nháp')
-        })
-        .catch(() => setDraftStatus('Chưa lưu được bản nháp'))
+      const saved = draftService.saveDraft(id, payload)
+      const latestDraft = latestDraftValueRef.current
+      if (
+        latestDraft.understood === payload.understood
+        && latestDraft.notUnderstood === payload.notUnderstood
+        && latestDraft.anonymous === payload.isAnonymous
+      ) {
+        hasLocalDraftChangesRef.current = false
+      }
+      setDraftStatus(saved.updatedAt ? `Đã lưu lúc ${formatDateTime(saved.updatedAt)}` : 'Đã lưu bản nháp')
     }, 900)
     return () => window.clearTimeout(handle)
-  }, [anonymous, draftLoaded, existingSubmission, expired, id, notUnderstood, startedAt, understood])
+  }, [anonymous, draftLoaded, expired, id, notUnderstood, startedAt, understood])
 
   function updateUnderstood(value: string) {
     hasLocalDraftChangesRef.current = true
@@ -114,6 +113,20 @@ export function LearnPage() {
     setAnonymous(value)
   }
 
+  async function handleUpload(file: File) {
+    setUploadError('')
+    try {
+      const resource = await uploadService.uploadFile(file)
+      setUploadedFiles((prev) => [...prev, resource])
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Upload thất bại, vui lòng thử lại.')
+    }
+  }
+
+  function handleRemoveFile(index: number) {
+    setUploadedFiles((prev) => prev.filter((_, i) => i !== index))
+  }
+
   async function submit() {
     setSubmitting(true)
     setError('')
@@ -123,29 +136,16 @@ export function LearnPage() {
         notUnderstood,
         isAnonymous: anonymous,
         timeSpentSeconds,
-        files,
+        resources: uploadedFiles,
       })
-      navigate(`/topics/${id}/success`)
+      draftService.clearDraft(id)
+      navigate(`/topics/${id}/peer`)
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Không thể nộp bài. Vui lòng thử lại.')
     } finally {
       setSubmitting(false)
       setConfirm(false)
     }
-  }
-
-  if (existingSubmission) {
-    return (
-      <Card className="mx-auto max-w-3xl p-7 text-center">
-        <Badge tone="success">Đã nộp bài</Badge>
-        <h1 className="mt-4 text-3xl font-extrabold text-primary-container">Bài học đã được khóa</h1>
-        <p className="mt-3 text-ink-muted">Bạn đã nộp bài cho chủ đề này. Hãy xem lại bài của mình hoặc vào khu vực dạy chéo.</p>
-        <div className="mt-6 flex flex-wrap justify-center gap-3">
-          <Link to={`/topics/${id}/my-submission`}><Button variant="secondary">Xem bài của tôi</Button></Link>
-          <Link to={`/topics/${id}/peer`}><Button>Vào dạy chéo</Button></Link>
-        </div>
-      </Card>
-    )
   }
 
   return (
@@ -178,14 +178,16 @@ export function LearnPage() {
               Nộp bài ẩn danh trong khu vực dạy chéo
             </label>
             <FileUploadBox
-              state={invalidFiles ? 'error' : files.length >= maxFiles ? 'limit' : 'ready'}
-              files={files}
+              state={uploadedFiles.length >= maxFiles ? 'limit' : 'ready'}
+              uploadedFiles={uploadedFiles}
               disabled={expired}
-              onFilesChange={setFiles}
+              onUpload={handleUpload}
+              onRemove={handleRemoveFile}
             />
+            {uploadError && <p className="text-sm font-semibold text-error">{uploadError}</p>}
             <div className="flex items-center justify-between gap-4 rounded-md bg-surface-low p-4">
               <div className="text-sm text-ink-muted">
-                <span className="font-bold text-ink">{words}</span> từ, <span className="font-bold text-ink">{files.length}</span> file đính kèm.
+                <span className="font-bold text-ink">{words}</span> từ, <span className="font-bold text-ink">{uploadedFiles.length}</span> file đính kèm.
               </div>
               <Button disabled={submitDisabled} onClick={() => setConfirm(true)}>
                 {expired ? 'Đã hết hạn nộp' : submitting ? 'Đang nộp...' : 'Nộp bài'}
@@ -196,29 +198,31 @@ export function LearnPage() {
       </div>
 
       <aside className="space-y-4">
-        <Card className="sticky top-24 p-5">
-          <p className="text-sm font-bold text-ink-muted">Countdown</p>
-          <p className={`mt-2 text-timer font-extrabold ${warning ? 'text-amber-900' : expired ? 'text-error' : 'text-primary-container'}`}>
-            {formatRemaining(remainingMs)}
-          </p>
-          <p className="text-sm text-ink-muted">
-            {expired ? 'Window học đã hết hạn, nút nộp bị khóa.' : 'Thời gian còn lại trong window học.'}
-          </p>
-          <ProgressBar value={getWindowProgress(topic.windowHours, remainingMs)} className="mt-4" />
-        </Card>
-        <Card className="p-5">
-          <p className="mb-3 font-bold text-primary-container">Tài liệu tham khảo</p>
-          <ResourceList resources={topic.resources} />
-        </Card>
+        <div className="sticky top-24 space-y-4">
+          <Card className="p-5">
+            <p className="text-sm font-bold text-ink-muted">Countdown</p>
+            <p className={`mt-2 text-timer font-extrabold ${warning ? 'text-amber-900' : expired ? 'text-error' : 'text-primary-container'}`}>
+              {formatRemaining(remainingMs)}
+            </p>
+            <p className="text-sm text-ink-muted">
+              {expired ? 'Window học đã hết hạn, nút nộp bị khóa.' : 'Thời gian còn lại trong window học.'}
+            </p>
+            <ProgressBar value={getWindowProgress(windowHours, remainingMs)} className="mt-4" />
+          </Card>
+          <Card className="p-5">
+            <p className="mb-3 font-bold text-primary-container">Tài liệu tham khảo</p>
+            <ResourceList resources={topic.resources} />
+          </Card>
+        </div>
       </aside>
 
       <Modal open={confirm} title="Xác nhận nộp bài" onClose={() => setConfirm(false)}>
         <div className="space-y-4 text-sm text-ink-muted">
-          <p>Bài nộp sẽ bị khóa sau khi gửi. Bạn vẫn có thể xem lại trong mục “Bài của tôi”.</p>
+          <p>Bài nộp sẽ bị khóa sau khi gửi. Bạn vẫn có thể xem lại trong mục "Bài của tôi".</p>
           <div className="rounded-md bg-surface-low p-4">
             <p><span className="font-bold text-ink">Trạng thái:</span> {anonymous ? 'Ẩn danh' : 'Công khai tên người học'}</p>
             <p><span className="font-bold text-ink">Số từ:</span> {words}</p>
-            <p><span className="font-bold text-ink">File:</span> {files.length ? files.map((file) => file.name).join(', ') : 'Không có'}</p>
+            <p><span className="font-bold text-ink">File:</span> {uploadedFiles.length ? uploadedFiles.map((f) => f.label).join(', ') : 'Không có'}</p>
           </div>
           <div className="flex justify-end gap-3">
             <Button variant="secondary" onClick={() => setConfirm(false)}>Kiểm tra lại</Button>
@@ -232,8 +236,8 @@ export function LearnPage() {
 
 export function SubmitSuccessPage() {
   const { id = 't1' } = useParams()
-  const { data: topic } = useAsync(() => topicService.getTopicById(id), lookupService.getTopic(id), [id])
-  const { data: submission } = useAsync(() => submissionService.getMySubmission(id), null, [id])
+  const { data: topic } = useAsync(() => topicService.getTopicById(id), topicFallback(id), [id])
+  const submission = topic.mySubmission
   return (
     <div className="mx-auto max-w-3xl">
       <Card className="p-8 text-center">
@@ -242,11 +246,9 @@ export function SubmitSuccessPage() {
         </div>
         <h1 className="mt-5 text-[34px] font-extrabold text-primary-container">Nộp bài thành công</h1>
         <p className="mt-3 text-ink-muted">
-          Bài của bạn trong chủ đề “{topic.title}” đã được khóa và mở quyền vào khu vực dạy chéo.
+          Bài của bạn trong chủ đề "{topic.title}" đã được khóa và mở quyền vào khu vực dạy chéo.
         </p>
         <div className="mt-6 grid grid-cols-3 gap-4 text-left">
-          <Card className="p-4"><p className="text-2xl font-extrabold">{submission ? minutesToReadable(submission.timeSpentMinutes) : '--'}</p><p className="text-sm text-ink-muted">thời gian học</p></Card>
-          <Card className="p-4"><p className="text-2xl font-extrabold">{submission?.wordCount ?? '--'}</p><p className="text-sm text-ink-muted">số từ</p></Card>
           <Card className="p-4"><p className="text-2xl font-extrabold">{submission?.isAnonymous ? 'Ẩn danh' : 'Công khai'}</p><p className="text-sm text-ink-muted">hiển thị</p></Card>
         </div>
         <div className="mt-7 flex justify-center gap-3">
@@ -260,8 +262,8 @@ export function SubmitSuccessPage() {
 
 export function MySubmissionPage() {
   const { id = 't2' } = useParams()
-  const { data: submission } = useAsync(() => submissionService.getMySubmission(id), null, [id])
-  const { data: topic } = useAsync(() => topicService.getTopicById(id), lookupService.getTopic(id), [id])
+  const { data: topic } = useAsync(() => topicService.getTopicById(id), topicFallback(id), [id])
+  const submission = topic.mySubmission
 
   if (!submission) {
     return (
@@ -293,8 +295,6 @@ export function MySubmissionPage() {
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <SubmissionStat label="Nộp ngày" value={formatDateTime(submission.createdAt)} />
-        <SubmissionStat label="Số từ" value={String(submission.wordCount)} />
-        <SubmissionStat label="Thời gian viết" value={minutesToReadable(submission.timeSpentMinutes)} />
         <SubmissionStat label="Lượt thích" value={String(submission.likeCount)} />
       </div>
 
@@ -302,11 +302,11 @@ export function MySubmissionPage() {
         <div className="grid gap-5">
           <SubmissionReadOnlySection title="Điều đã hiểu" icon="check" content={submission.understood} />
           <SubmissionReadOnlySection title="Điều chưa hiểu" icon="message" content={submission.notUnderstood} />
-          {submission.files.length > 0 && (
+          {submission.resources.length > 0 && (
             <section className="rounded-md bg-surface-low p-5">
               <h2 className="text-lg font-extrabold text-primary-container">File đính kèm</h2>
               <div className="mt-3 flex flex-wrap gap-2">
-                {submission.files.map((file) => <Badge key={file.id}>{file.name}</Badge>)}
+                {submission.resources.map((file) => <Badge key={file.id}>{file.label}</Badge>)}
               </div>
             </section>
           )}

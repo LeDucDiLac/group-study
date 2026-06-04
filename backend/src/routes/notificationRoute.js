@@ -7,3 +7,5 @@ router.get('/', authMiddleware, getNotifications)
 router.post('/mark-all-read', authMiddleware, markAllRead)
 router.post('/mark-as-read', authMiddleware, markAsRead)
 router.post('/system', createSystemNotification)
+
+export default router

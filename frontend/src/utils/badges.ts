@@ -1,56 +1,50 @@
-import type { BadgeLevel, BadgeStats } from '@/types/domain'
-
-export const BADGE_LABELS: Record<BadgeLevel, string> = {
-  newcomer: 'Tân Binh Tri Thức',
-  helper: 'Trợ Thủ Tri Thức',
-  mentor: 'Dẫn Lối Tri Thức',
-  expert: 'Bậc Thầy Cộng Đồng',
+export const RANK_LABELS: Record<number, string> = {
+  0: 'Tập sự',
+  1: 'Tân binh',
+  2: 'Sinh viên chính thức',
+  3: 'Sinh viên kỳ cựu',
+  4: 'Tinh anh',
+  5: 'Học giả',
+  6: 'Đại học giả',
+  7: 'Lão sư',
+  8: 'Đại lão sư',
+  9: 'Thách đấu',
 }
 
-export const BADGE_STYLES: Record<BadgeLevel, string> = {
-  newcomer: 'bg-surface-low text-ink-muted border-border',
-  helper: 'bg-info-fixed text-info-dark border-info-fixed-dim',
-  mentor: 'bg-emerald-container text-emerald-dark border-emerald-glow',
-  expert: 'bg-secondary-fixed text-secondary-container border-secondary-fixed-dim',
+export const RANK_STYLES: Record<number, string> = {
+  0: 'bg-surface-low text-ink-muted border-border',
+  1: 'bg-surface-low text-ink-muted border-border',
+  2: 'bg-surface-low text-ink-muted border-border',
+  3: 'bg-info-fixed text-info-dark border-info-fixed-dim',
+  4: 'bg-info-fixed text-info-dark border-info-fixed-dim',
+  5: 'bg-emerald-container text-emerald-dark border-emerald-glow',
+  6: 'bg-emerald-container text-emerald-dark border-emerald-glow',
+  7: 'bg-secondary-fixed text-secondary-container border-secondary-fixed-dim',
+  8: 'bg-secondary-fixed text-secondary-container border-secondary-fixed-dim',
+  9: 'bg-amber-light text-amber-900 border-amber-400',
 }
 
-const thresholds: Array<{ level: BadgeLevel; answers: number; likes: number }> = [
-  { level: 'newcomer', answers: 0, likes: 0 },
-  { level: 'helper', answers: 5, likes: 10 },
-  { level: 'mentor', answers: 20, likes: 50 },
-  { level: 'expert', answers: 50, likes: 150 },
-]
-
-export function calculateBadgeLevel(answerCount: number, answerLikeCount: number): BadgeLevel {
-  return thresholds.reduce<BadgeLevel>((current, threshold) => {
-    if (answerCount >= threshold.answers && answerLikeCount >= threshold.likes) return threshold.level
-    return current
-  }, 'newcomer')
+export function getRankTier(rank: number): number {
+  return Math.min(Math.floor(rank / 100), 9)
 }
 
-export function getNextBadgeProgress(stats: BadgeStats) {
-  const currentIndex = thresholds.findIndex((item) => item.level === stats.level)
-  const next = thresholds[currentIndex + 1]
-
-  if (!next) {
+export function getRankProgress(rank: number) {
+  if (rank < 900) {
+    const percent = rank % 100
+    const nextRankTier = getRankTier(rank) + 1
+    const remaining = 100 - percent
     return {
-      label: 'Bạn đã đạt cấp cao nhất',
-      percent: 100,
-      remainingAnswers: 0,
-      remainingLikes: 0,
+      percent,
+      label: `Cần thêm ${remaining} điểm để đạt ${RANK_LABELS[nextRankTier]}`,
+      remaining,
     }
-  }
-
-  const answerProgress = Math.min(1, stats.answerCount / next.answers)
-  const likeProgress = Math.min(1, stats.answerLikeCount / next.likes)
-  const percent = Math.round(((answerProgress + likeProgress) / 2) * 100)
-  const remainingAnswers = Math.max(0, next.answers - stats.answerCount)
-  const remainingLikes = Math.max(0, next.likes - stats.answerLikeCount)
-
-  return {
-    label: `Cần thêm ${remainingAnswers} câu trả lời và ${remainingLikes} like để đạt ${BADGE_LABELS[next.level]}`,
-    percent,
-    remainingAnswers,
-    remainingLikes,
+  } else {
+    const percent = Math.min(100, rank - 900)
+    const remaining = Math.max(0, 1000 - rank)
+    return {
+      percent,
+      label: remaining > 0 ? `Cần thêm ${remaining} điểm để đạt cấp cao nhất` : 'Bạn đã đạt cấp cao nhất',
+      remaining,
+    }
   }
 }

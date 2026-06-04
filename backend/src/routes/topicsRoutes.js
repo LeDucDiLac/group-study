@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import {
-  listTopics,
+  listTopicsController,
+  getParticipatedTopics,
   createTopic,
   getTopic,
   updateTopic,
@@ -8,25 +9,21 @@ import {
   rejectTopic,
   markTopicCompleted,
   getUnapprovedTopics,
+  participateTopic,
 } from '../controllers/topicsController.js'
-import multer from 'multer'
 import authMiddleware from '../middleware/authMiddleware.js'
 
 const router = Router()
-const upload = multer({ dest: 'uploads/resources/' })
 
-router.get('/', listTopics)
+router.get('/', authMiddleware, listTopicsController)
+router.get('/participated', authMiddleware, getParticipatedTopics)
+router.get('/unapproved', authMiddleware, getUnapprovedTopics)
+router.post('/:id/participate', authMiddleware, participateTopic)
 router.post('/', authMiddleware, createTopic)
-router.get('/:id', getTopic)
+router.get('/:id', authMiddleware, getTopic)
 router.patch('/:id', authMiddleware, updateTopic)
 router.post('/:id/approve', authMiddleware, approveTopic)
 router.post('/:id/reject', authMiddleware, rejectTopic)
 router.post('/:id/mark-completed', authMiddleware, markTopicCompleted)
-router.post('/uploads', upload.single('file'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
-  const fileUrl = `/uploads/resources/${req.file.filename}`
-  res.json({ url: fileUrl })
-})
-router.get('/unapproved', authMiddleware, getUnapprovedTopics)
 
 export default router

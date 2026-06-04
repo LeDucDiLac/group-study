@@ -1,6 +1,6 @@
 import mongoose from 'mongoose'
 import Topic from '../models/Topic.js'
-import User from '../models/User.js'
+import User, { publicInfo } from '../models/User.js'
 import { addPointsForSubmissionApproved, addPointsForTopicSubmission } from '../services/rankService.js'
 import { addSubmissionToSummary } from '../services/profileService.js'
 import { createSystemNotification } from '../services/notificationService.js'
@@ -137,14 +137,19 @@ function canDailyPeek(userRank) {
   return typeof userRank === 'number' && userRank >= 300 && userRank <= 500
 }
 
-function normalizeSubmission(submission) {
+async function normalizeSubmission(submission, admin = false) {
   if (!submission) {
     return null
   }
-
   const commentCount = countNestedComments(submission.comments)
-  const { comments, ...rest } = submission
-  return { ...rest, commentCount }
+  const likeCount = submission.reactions?.like?.length || 0
+  const dislikeCount = submission.reactions?.dislike?.length || 0
+  let user = null
+  if (!submission.isAnonymous || admin) {
+    user = await publicInfo(submission.userId)
+  }
+  const { comments, reactions, userId, ...rest } = submission
+  return { ...rest, commentCount, likeCount, dislikeCount, user }
 }
 
 function shouldAutoApproveSubmission(user) {
@@ -157,6 +162,43 @@ function shouldAutoApproveSubmission(user) {
   }
 
   return false
+}
+
+export async function getSubmissionComments(req, res, next) {
+  const { submissionId } = req.params
+  const userId = req.user?.id || req.user?._id
+
+  if (!mongoose.Types.ObjectId.isValid(submissionId)) {
+    return res.status(400).json({ error: 'Liên kết bài nộp không hợp lệ.' })
+  }
+
+  try {
+    const topic = await Topic.findOne({ 'submissions._id': submissionId })
+      .select('submissions._id submissions.userId submissions.comments submissions.status')
+      .lean()
+
+    if (!topic) {
+      return res.status(404).json({ error: 'Không tìm thấy bài nộp.' })
+    }
+
+    const submission = topic.submissions.find(s => String(s._id) === submissionId)
+    if (!submission) {
+      return res.status(404).json({ error: 'Không tìm thấy bài nộp.' })
+    }
+
+    // Chỉ cho xem nếu đã nộp bài hoặc là chủ bài
+    const isOwner = String(submission.userId) === String(userId)
+    if (!isOwner) {
+      const hasSubmitted = topic.submissions.some(s => String(s.userId) === String(userId))
+      if (!hasSubmitted) {
+        return res.status(403).json({ error: 'Bạn cần nộp bài trước khi xem bình luận.' })
+      }
+    }
+
+    return res.json({ comments: submission.comments || [] })
+  } catch (error) {
+    return next(error)
+  }
 }
 
 export async function createSubmission(req, res, next) {
@@ -207,8 +249,8 @@ export async function createSubmission(req, res, next) {
 
     const hasSubmitted = Array.isArray(topic.submissions)
       ? topic.submissions.some((submission) =>
-          submission.userId && submission.userId.toString() === userId
-        )
+        submission.userId && submission.userId.toString() === userId
+      )
       : false
 
     if (hasSubmitted) {
@@ -245,7 +287,7 @@ export async function createSubmission(req, res, next) {
 
     if (shouldAutoApprove) {
       await addPointsForSubmissionApproved({ submissionOwnerId: userObjectId })
-      await addPointsForTopicSubmission({ topicOwnerId: topic.createdBy, submissionOwnerId: userObjectId })
+      await addPointsForTopicSubmission({ topicOwnerId: topic.createdBy, actorId: userId })
       await addSubmissionToSummary(userId, topicId, createdSubmission._id)
     }
 
@@ -279,8 +321,8 @@ export async function listTopicSubmissions(req, res, next) {
     const userObjectId = new mongoose.Types.ObjectId(userId)
     const hasSubmitted = Array.isArray(topic.submissions)
       ? topic.submissions.some((submission) =>
-          submission.userId && submission.userId.toString() === userId
-        )
+        submission.userId && submission.userId.toString() === userId
+      )
       : false
 
     if (!hasSubmitted) {
@@ -295,7 +337,14 @@ export async function listTopicSubmissions(req, res, next) {
     }
 
     const items = Array.isArray(topic.submissions)
-      ? topic.submissions.map(normalizeSubmission)
+      ? await Promise.all(
+        topic.submissions
+          .filter(s => s.status === 'Đã duyệt' || String(s.userId) === userId)
+          .map(async (s) => {
+            const normalized = await normalizeSubmission(s)
+            return normalized
+          })
+      )
       : []
 
     return res.json({
@@ -349,7 +398,7 @@ export async function listMySubmissions(req, res, next) {
 
 export async function peekSubmissions(req, res, next) {
   const { topicId } = req.params
-  const userId = Sring(req.user._id)
+  const userId = String(req.user._id)
 
   if (!userId) {
     return res.status(401).json({ error: 'Bạn cần đăng nhập để xem bài nộp.' })
@@ -371,23 +420,24 @@ export async function peekSubmissions(req, res, next) {
     if (!user) {
       return res.status(404).json({ error: 'Không tìm thấy người dùng.' })
     }
-    
+
     const peekPermission = await allowDailyPeek(userId, user.rank, topicId)
     if (!peekPermission.allowed) {
       return res.status(403).json({ error: 'Bạn đã sử dụng quyền xem lén hôm nay. Vui lòng hoàn thành bài nộp để có thể xem các bài nộp khác.' })
     }
 
+    // Chỉ trả về submission có status là Đã duyệt
     const items = Array.isArray(topic.submissions)
-      ? topic.submissions.map(normalizeSubmission)
+      ? topic.submissions.filter(s => s.status === 'Đã duyệt').map(normalizeSubmission)
       : []
-      
+
     return res.json({
       topicId: topic._id?.toString(),
       topicTitle: topic.title,
       items,
     })
   }
-    catch (error) {
+  catch (error) {
     return next(error)
   }
 }
@@ -426,9 +476,9 @@ export async function approveSubmission(req, res, next) {
     }
 
     await addPointsForSubmissionApproved({ submissionOwnerId: submission.userId })
-    await addPointsForTopicSubmission({ topicOwnerId: topic.createdBy, submissionOwnerId: submission.userId })
+    await addPointsForTopicSubmission({ topicOwnerId: topic.createdBy, actorId: userId })
     await addSubmissionToSummary(submission.userId, topic._id, submission._id)
-    await createSystemNotification({ userId: submission.userId, actorId: userId, title: 'Bài nộp đã được duyệt', content: `Bài nộp của bạn cho chủ đề "${topic.title}" đã được duyệt.` , target: { topicId: topic._id, submissionId: submission._id } })
+    await createSystemNotification({ userId: submission.userId, actorId: userId, title: 'Bài nộp đã được duyệt', content: `Bài nộp của bạn cho chủ đề "${topic.title}" đã được duyệt.`, target: { topicId: topic._id, submissionId: submission._id } })
     return res.json({ ok: true })
   } catch (error) {
     return next(error)
@@ -447,12 +497,12 @@ export async function rejectSubmission(req, res, next) {
 
   if (role !== 'admin') {
     return res.status(403).json({ error: 'Bạn không có quyền từ chối bài nộp.' })
-  } 
+  }
 
   if (!mongoose.Types.ObjectId.isValid(submissionId)) {
     return res.status(400).json({ error: 'Liên kết bài nộp không hợp lệ.' })
   }
-  
+
   try {
     const topic = await Topic.findOneAndUpdate(
       { 'submissions._id': submissionId },
@@ -494,7 +544,7 @@ export async function getUnapprovedSubmissions(req, res, next) {
         items.push({
           topicId: topic._id?.toString(),
           topicTitle: topic.title,
-          submission: normalizeSubmission(submission),
+          submission: await normalizeSubmission(submission, true),
         })
       }
     }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import {
   ActionLink,
   Badge,
@@ -14,18 +14,10 @@ import {
   Textarea,
 } from '@/components/ui'
 import { ResourceList, TopicCard, TopicStatusBadge } from '@/components/topic/TopicCard'
-import { lookupService, submissionService, topicService } from '@/services/api'
-import type { Topic, TopicStatus } from '@/types/domain'
+import { topicFallback, topicService, uploadService } from '@/services/api'
+import type { Topic, TopicStatus, ResourceFile } from '@/types/domain'
 import { cn, formatDate } from '@/utils/format'
 import { useAsync } from '@/utils/hooks'
-
-const statusTabs: Array<{ label: string; value: TopicStatus | 'all' }> = [
-  { label: 'Tất cả', value: 'all' },
-  { label: 'Đang mở', value: 'open' },
-  { label: 'Chờ duyệt', value: 'pending' },
-  { label: 'Đã đóng', value: 'closed' },
-  { label: 'Bị từ chối', value: 'rejected' },
-]
 
 export function TopicsPage() {
   const [query, setQuery] = useState('')
@@ -39,7 +31,7 @@ export function TopicsPage() {
       total: allTopics.length,
       submissions: allTopics.reduce((sum, topic) => sum + topic.submissionCount, 0),
       likes: allTopics.reduce((sum, topic) => sum + topic.likeCount, 0),
-      pending: allTopics.filter((topic) => topic.status === 'pending').length,
+      pending: allTopics.filter((topic) => topic.status === 'Chưa duyệt').length,
     }),
     [allTopics],
   )
@@ -87,31 +79,12 @@ export function TopicsPage() {
             <CompactStat label="Chủ đề" value={stats.total} />
             <CompactStat label="Bài nộp" value={stats.submissions} />
             <CompactStat label="Lượt thích" value={stats.likes} />
-            <CompactStat label="Chờ duyệt" value={stats.pending} />
+            <CompactStat label="Chưa duyệt" value={stats.pending} />
           </div>
         </div>
       </div>
 
       <Card className="p-4">
-        <div className="flex flex-wrap items-center gap-2 border-b border-border-subtle pb-3">
-          {statusTabs.map((tab) => (
-            <button
-              key={tab.value}
-              type="button"
-              className={cn(
-                'h-8 rounded-full px-3.5 text-sm font-bold transition whitespace-nowrap',
-                status === tab.value
-                  ? 'bg-secondary-container text-white'
-                  : 'bg-transparent text-ink-muted hover:bg-surface-low hover:text-ink',
-              )}
-              onClick={() => setStatus(tab.value)}
-              title={`Lọc trạng thái ${tab.label}`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
         <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-[minmax(300px,1fr)_210px_190px_auto]">
           <label className="relative block">
             <Icon name="search" size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
@@ -152,7 +125,7 @@ export function TopicsPage() {
       ) : topics.length ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
           {topics.map((topic) => (
-            <TopicCard key={topic.id} topic={topic} />
+            <TopicCard key={topic._id} topic={topic} />
           ))}
         </div>
       ) : (
@@ -197,24 +170,49 @@ function TopicSkeleton() {
 
 export function TopicDetailPage() {
   const { id = 't1' } = useParams()
-  const { data: topic } = useAsync(() => topicService.getTopicById(id), lookupService.getTopic(id), [id])
-  const { data: mySubmission } = useAsync(() => submissionService.getMySubmission(id), null, [id])
-  const expired = topic.status === 'open' && Boolean(topic.closesAt) && new Date(topic.closesAt as string).getTime() <= Date.now()
-  const disabled = topic.status !== 'open' || expired
+  const navigate = useNavigate()
+  const { data: topic } = useAsync(() => topicService.getTopicById(id), topicFallback(id), [id])
+  const [participating, setParticipating] = useState(false)
+  const mySubmission = topic.mySubmission
+  const expired = topic.status === 'Đang mở' && Boolean(topic.closesAt) && new Date(topic.closesAt as string).getTime() <= Date.now()
+  const disabled = topic.status !== 'Đang mở' || expired
   const statusCopy =
     expired
       ? 'Window học đã kết thúc. Bạn vẫn có thể xem thông tin chủ đề, nhưng không thể nộp bài mới.'
-      : topic.status === 'closed'
-      ? 'Chủ đề đã đóng. Bạn vẫn có thể xem bài cộng đồng nhưng không thể bắt đầu học mới.'
-      : topic.status === 'rejected'
-        ? topic.rejectionReason ?? 'Đề xuất chưa đạt yêu cầu và cần chỉnh sửa trước khi gửi lại.'
-        : 'Chủ đề đang chờ admin duyệt trước khi mở cho cộng đồng.'
+      : topic.status === 'Đã hoàn thành'
+        ? 'Chủ đề đã đóng. Bạn vẫn có thể xem bài cộng đồng nhưng không thể bắt đầu học mới.'
+        : topic.status === 'Bị từ chối'
+          ? topic.rejectionReason ?? 'Đề xuất chưa đạt yêu cầu và cần chỉnh sửa trước khi gửi lại.'
+          : 'Chủ đề đang chờ admin duyệt trước khi mở cho cộng đồng.'
 
-  if (topic.status === 'pending') {
-    return <TopicPendingDetail topic={topic} />
+  async function handleStartLearning() {
+    if (disabled || participating) return
+    setParticipating(true)
+    let startedAt: number | null = null
+    try {
+      const result = await topicService.participate(id)
+      startedAt = result.startedAt ? new Date(result.startedAt).getTime() : Date.now()
+    } catch {
+      // Đã tham gia trước đó — dùng participationStartTime từ topic nếu có
+      startedAt = topic.participationStartTime
+        ? new Date(topic.participationStartTime).getTime()
+        : null
+    } finally {
+      setParticipating(false)
+    }
+    navigate(`/topics/${id}/learn`, {
+      state: {
+        participationStartTime: startedAt,
+        windowHours: topic.windowHours,
+      },
+    })
   }
 
-  if (topic.status === 'rejected') {
+  if (topic.status === 'Chưa duyệt')
+    return <TopicPendingDetail topic={topic} />
+
+
+  if (topic.status === 'Bị từ chối') {
     return <TopicRejectedDetail topic={topic} />
   }
 
@@ -234,16 +232,9 @@ export function TopicDetailPage() {
         </div>
 
         <Card className="mt-6 p-6">
-          <h2 className="text-xl font-extrabold text-primary-container">Bên trong chủ đề</h2>
-          <div className="mt-4 grid gap-4">
-            <div>
-              <p className="text-sm font-bold text-ink">Điều kiện trước khi học</p>
-              <p className="mt-1 text-sm text-ink-muted">{topic.prerequisites}</p>
-            </div>
-            <div>
-              <p className="mb-2 text-sm font-bold text-ink">Tài liệu tham khảo</p>
-              <ResourceList resources={topic.resources} />
-            </div>
+          <h2 className="text-xl font-extrabold text-primary-container">Tài liệu tham khảo</h2>
+          <div className="mt-4">
+            <ResourceList resources={topic.resources} />
           </div>
         </Card>
 
@@ -259,7 +250,6 @@ export function TopicDetailPage() {
         <Card className="p-5">
           <p className="text-sm font-bold text-ink-muted">Window học</p>
           <p className="mt-2 text-2xl font-extrabold text-primary-container">{topic.windowHours} giờ</p>
-          <p className="mt-1 text-sm text-ink-muted">{topic.windowLabel}</p>
           <div className="mt-5 grid grid-cols-2 gap-3">
             <div className="rounded-md bg-surface-low p-3">
               <p className="text-xl font-extrabold text-primary-container">{topic.submissionCount}</p>
@@ -274,21 +264,25 @@ export function TopicDetailPage() {
             {mySubmission ? (
               <>
                 <Badge tone="success">Đã nộp bài</Badge>
-                <ActionLink to={`/topics/${topic.id}/my-submission`} variant="primary">
+                <ActionLink to={`/topics/${topic._id}/my-submission`} variant="primary">
                   Xem bài của bạn
                 </ActionLink>
-                <ActionLink to={`/topics/${topic.id}/peer`}>Vào dạy chéo</ActionLink>
+                <ActionLink to={`/topics/${topic._id}/peer`}>Vào dạy chéo</ActionLink>
               </>
             ) : (
-              <ActionLink to={disabled ? `/topics/${topic.id}` : `/topics/${topic.id}/learn`} variant={disabled ? 'secondary' : 'primary'}>
-                {disabled ? 'Chưa thể học' : 'Bắt đầu học'}
-              </ActionLink>
+              <Button
+                variant={disabled ? 'secondary' : 'primary'}
+                disabled={disabled || participating}
+                onClick={handleStartLearning}
+                className="w-full"
+              >
+                {participating ? 'Đang xử lý...' : disabled ? 'Chưa thể học' : 'Bắt đầu học'}
+              </Button>
             )}
           </div>
         </Card>
         <Card className="p-5">
           <p className="text-sm font-bold text-ink">Thông tin đề xuất</p>
-          <p className="mt-2 text-sm text-ink-muted">Người đề xuất: {getTopicProposerName(topic)}</p>
           <p className="text-sm text-ink-muted">Ngày tạo: {formatDate(topic.createdAt)}</p>
         </Card>
       </aside>
@@ -328,7 +322,7 @@ function TopicPendingHeader({ topic }: { topic: Topic }) {
         ))}
       </div>
       <div className="mt-5 rounded-md border border-amber bg-amber-light/55 px-4 py-4">
-        <p className="text-sm font-extrabold text-amber-900">Đề xuất đang chờ duyệt</p>
+        <p className="text-sm font-extrabold text-amber-900">Đề xuất chưa duyệt</p>
         <p className="mt-1 text-sm font-semibold leading-6 text-amber-900">
           Đây là chủ đề bạn đã đề xuất. Chủ đề sẽ được mở cho cộng đồng học sau khi admin phê duyệt.
         </p>
@@ -345,10 +339,6 @@ function TopicProposalInfoCard({ topic }: { topic: Topic }) {
         <section>
           <h3 className="text-sm font-extrabold text-ink">Mục tiêu / mô tả chủ đề</h3>
           <p className="mt-2 text-sm leading-6 text-ink-muted">{topic.description}</p>
-        </section>
-        <section>
-          <h3 className="text-sm font-extrabold text-ink">Điều kiện trước khi học</h3>
-          <p className="mt-2 text-sm leading-6 text-ink-muted">{topic.prerequisites}</p>
         </section>
         <section>
           <h3 className="mb-2 text-sm font-extrabold text-ink">Tài liệu tham khảo</h3>
@@ -378,7 +368,7 @@ function TopicPendingNotice({ topic }: { topic: Topic }) {
             Chủ đề này đang chờ admin duyệt trước khi mở cho cộng đồng. Sau khi được duyệt, bạn và những người học khác có thể bắt đầu học trong window đã thiết lập.
           </p>
           <div className="mt-4 grid gap-2 text-sm font-semibold text-amber-900 sm:grid-cols-3">
-            <span>Trạng thái: Chờ duyệt</span>
+            <span>Trạng thái: Chưa duyệt</span>
             <span>Thời gian học: {topic.windowHours} giờ</span>
             <span>Có thể chỉnh sửa: Có</span>
           </div>
@@ -393,12 +383,11 @@ function TopicStatusSidebar({ topic }: { topic: Topic }) {
     <Card className="p-5">
       <h2 className="text-lg font-extrabold text-primary-container">Trạng thái đề xuất</h2>
       <div className="mt-4">
-        <Badge tone="warning" className="px-3 py-1.5 text-sm">Chờ duyệt</Badge>
+        <Badge tone="warning" className="px-3 py-1.5 text-sm">Chưa duyệt</Badge>
       </div>
       <div className="mt-5">
         <p className="text-sm font-bold text-ink-muted">Window học</p>
         <p className="mt-2 text-2xl font-extrabold text-primary-container">{topic.windowHours} giờ</p>
-        <p className="mt-1 text-sm text-ink-muted">{topic.windowLabel}</p>
       </div>
       <div className="mt-5 grid grid-cols-2 gap-3">
         <div className="rounded-md bg-surface-low p-3">
@@ -418,9 +407,8 @@ function TopicStatusSidebar({ topic }: { topic: Topic }) {
       <div className="mt-5 border-t border-border-subtle pt-5">
         <h3 className="text-sm font-extrabold text-primary-container">Thông tin đề xuất</h3>
         <div className="mt-4 grid gap-3 text-sm">
-          <InfoLine label="Người đề xuất" value={getTopicProposerName(topic)} />
           <InfoLine label="Ngày tạo" value={formatDate(topic.createdAt)} />
-          <InfoLine label="Mã đề xuất" value={topic.id.toUpperCase()} />
+          <InfoLine label="Mã đề xuất" value={topic._id.toUpperCase()} />
         </div>
       </div>
 
@@ -483,10 +471,6 @@ function RejectedProposalInfoCard({ topic }: { topic: Topic }) {
           <p className="mt-2 text-sm leading-6 text-ink-muted">{topic.description}</p>
         </section>
         <section>
-          <h3 className="text-sm font-extrabold text-ink">Điều kiện trước khi học</h3>
-          <p className="mt-2 text-sm leading-6 text-ink-muted">{topic.prerequisites}</p>
-        </section>
-        <section>
           <h3 className="mb-2 text-sm font-extrabold text-ink">Tài liệu tham khảo</h3>
           <ResourceList resources={topic.resources} />
         </section>
@@ -501,9 +485,8 @@ function RejectedProposalInfoCard({ topic }: { topic: Topic }) {
 
 function RejectionReasonCard({ topic }: { topic: Topic }) {
   const reason = topic.rejectionReason?.trim()
-  const suggestions = (topic.revisionSuggestions ?? []).map((item) => item.trim()).filter(Boolean)
 
-  if (!reason && !suggestions.length) return null
+  if (!reason) return null
 
   return (
     <Card className="border-error-container bg-error-container/25 p-5">
@@ -514,16 +497,6 @@ function RejectionReasonCard({ topic }: { topic: Topic }) {
         <div>
           <h2 className="text-lg font-extrabold text-error">Lý do bị từ chối</h2>
           {reason && <p className="mt-2 text-sm font-semibold leading-6 text-error">{reason}</p>}
-          {!!suggestions.length && (
-            <ul className="mt-4 grid gap-2 text-sm font-semibold text-error">
-              {suggestions.map((suggestion) => (
-                <li key={suggestion} className="flex gap-2">
-                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-error" />
-                  <span>{suggestion}</span>
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
       </div>
     </Card>
@@ -540,7 +513,6 @@ function TopicRejectedSidebar({ topic }: { topic: Topic }) {
       <div className="mt-5">
         <p className="text-sm font-bold text-ink-muted">Window học</p>
         <p className="mt-2 text-2xl font-extrabold text-primary-container">{topic.windowHours} giờ</p>
-        <p className="mt-1 text-sm text-ink-muted">{topic.windowLabel}</p>
         <p className="mt-1 text-sm font-bold text-error">Đã từ chối</p>
       </div>
       <div className="mt-5 grid grid-cols-2 gap-3">
@@ -558,7 +530,7 @@ function TopicRejectedSidebar({ topic }: { topic: Topic }) {
       </div>
       <p className="mt-3 text-xs font-medium leading-5 text-ink-subtle">Bạn có thể chỉnh sửa đề xuất và gửi lại nếu muốn.</p>
       <div className="mt-5 grid gap-2">
-        <ActionLink to={`/topics/${topic.id}/edit`} variant="primary">Chỉnh sửa & gửi lại</ActionLink>
+        <ActionLink to={`/topics/${topic._id}/edit`} variant="primary">Chỉnh sửa & gửi lại</ActionLink>
         <ActionLink to="/topics">Quay lại danh sách chủ đề</ActionLink>
       </div>
     </Card>
@@ -566,15 +538,11 @@ function TopicRejectedSidebar({ topic }: { topic: Topic }) {
 }
 
 function RejectedProposalMetaCard({ topic }: { topic: Topic }) {
-  const reviewerName = topic.reviewedByName ?? (topic.reviewedBy ? lookupService.getUser(topic.reviewedBy).name : 'Admin TimeBoxed')
   return (
     <Card className="p-5">
       <h2 className="text-lg font-extrabold text-primary-container">Thông tin đề xuất</h2>
       <div className="mt-4 grid gap-3 text-sm">
-        <InfoLine label="Người đề xuất" value={getTopicProposerName(topic)} />
         <InfoLine label="Ngày tạo" value={formatDate(topic.createdAt)} />
-        <InfoLine label="Ngày từ chối" value={formatDate(topic.rejectedAt ?? topic.reviewedAt ?? topic.createdAt)} />
-        <InfoLine label="Người duyệt" value={reviewerName} />
       </div>
     </Card>
   )
@@ -589,10 +557,6 @@ function InfoLine({ label, value }: { label: string; value: string }) {
   )
 }
 
-function getTopicProposerName(topic: Topic) {
-  return topic.proposedByName ?? lookupService.getUser(topic.proposedBy).name
-}
-
 export function CreateTopicPage() {
   const { id } = useParams()
   const { data: editingTopic, loading: editingTopicLoading } = useAsync<Topic | undefined>(
@@ -600,7 +564,7 @@ export function CreateTopicPage() {
     undefined,
     [id],
   )
-  const isResubmitting = editingTopic?.status === 'rejected'
+  const isResubmitting = editingTopic?.status === 'Bị từ chối'
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [showRejected, setShowRejected] = useState(false)
@@ -611,8 +575,9 @@ export function CreateTopicPage() {
   const [durationHours, setDurationHours] = useState(editingTopic ? String(editingTopic.windowHours) : '')
   const [tags, setTags] = useState(editingTopic?.tags ?? [])
   const [tagDraft, setTagDraft] = useState('')
-  const [resourceLink, setResourceLink] = useState(editingTopic?.resources[0]?.url || editingTopic?.resources[0]?.name || '')
-  const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
+  const [linkLabel, setLinkLabel] = useState('')
+  const [linkUrl, setLinkUrl] = useState('')
+  const [uploadedResources, setUploadedResources] = useState<ResourceFile[]>([])
   const [reason, setReason] = useState(editingTopic?.proposalReason ?? '')
 
   useEffect(() => {
@@ -622,20 +587,53 @@ export function CreateTopicPage() {
     setCategory(editingTopic.category || 'Lập trình')
     setDurationHours(String(editingTopic.windowHours || 48))
     setTags(editingTopic.tags ?? [])
-    setResourceLink(editingTopic.resources[0]?.url || editingTopic.resources[0]?.name || '')
-    setUploadedFiles([])
-    setReason(editingTopic.proposalReason ?? '')
+    setLinkLabel('')
+    setLinkUrl('')
+    setUploadedResources(editingTopic.resources ?? [])
+    setReason(editingTopic?.proposalReason ?? '')
   }, [editingTopic])
 
-  const isResourceValid =
-    !resourceLink.trim() ||
-    /^https?:\/\/\S+$/i.test(resourceLink.trim()) ||
-    /^[\w\s.-]+\.(pdf|png|jpg|jpeg|webp|docx|md|txt)$/i.test(resourceLink.trim())
+  const addLinkToResources = () => {
+    const url = linkUrl.trim()
+    if (!url) return null
+    if (!/^https?:\/\/\S+$/i.test(url)) {
+      return { error: 'URL tài liệu phải bắt đầu bằng http:// hoặc https://' }
+    }
+    const label = linkLabel.trim() || url
+    return {
+      id: `link-${Date.now()}`,
+      label,
+      type: 'link' as const,
+      url,
+    }
+  }
+
+  const handleAddLink = () => {
+    const result = addLinkToResources()
+    if (!result) return
+    if ('error' in result) {
+      const errMsg = result.error || 'URL tài liệu không hợp lệ.'
+      setErrors((current) => ({ ...current, linkUrl: errMsg }))
+      return
+    }
+    setUploadedResources((current) => [...current, result])
+    setLinkLabel('')
+    setLinkUrl('')
+    setErrors((current) => ({ ...current, linkUrl: '', resources: '' }))
+  }
+
+  const handleLinkKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      handleAddLink()
+    }
+  }
+
   const checklist = [
     { label: 'Tên chủ đề', done: Boolean(title.trim()) },
     { label: 'Mô tả rõ ràng', done: Boolean(description.trim()) },
     { label: 'Tối đa 5 tags', done: tags.length > 0 && tags.length <= 5 },
-    { label: 'Tài liệu hợp lệ', done: isResourceValid && (Boolean(resourceLink.trim()) || uploadedFiles.length > 0) },
+    { label: 'Tài liệu hợp lệ', done: uploadedResources.length > 0 || (!!linkUrl.trim() && /^https?:\/\/\S+$/i.test(linkUrl.trim())) },
     { label: 'Thời lượng học', done: Number(durationHours) >= 24 && Number(durationHours) <= 168 },
   ]
   const completedCount = checklist.filter((item) => item.done).length
@@ -647,38 +645,46 @@ export function CreateTopicPage() {
     if (!title.trim()) nextErrors.title = 'Vui lòng nhập tên chủ đề.'
     if (!description.trim()) nextErrors.description = 'Vui lòng mô tả mục tiêu học của chủ đề.'
     if (tags.length > 5) nextErrors.tags = 'Tối đa 5 tags.'
-    if (!isResourceValid) nextErrors.resources = 'Chỉ chấp nhận URL hoặc file PDF, PNG, JPG, WebP, DOCX, MD, TXT.'
     if (!durationHours || Number(durationHours) < 24 || Number(durationHours) > 168) nextErrors.duration = 'Thời lượng học phải từ 24 đến 168 giờ.'
+
+    const finalResources = [...uploadedResources]
+    if (linkUrl.trim()) {
+      const result = addLinkToResources()
+      if (result && 'error' in result) {
+        nextErrors.linkUrl = result.error || 'URL tài liệu không hợp lệ.'
+      } else if (result) {
+        finalResources.push(result)
+      }
+    }
+
+    if (finalResources.length === 0) {
+      nextErrors.resources = 'Vui lòng thêm ít nhất một tài liệu tham khảo (file hoặc link).'
+    }
+
     setErrors(nextErrors)
     if (Object.keys(nextErrors).length) return
-    const resources = [
-      ...(resourceLink.trim()
-        ? [{
-            id: `${isResubmitting ? editingTopic?.id : 'new'}-resource-link`,
-            name: resourceLink.trim(),
-            type: resourceLink.trim().startsWith('http') ? 'link' as const : inferTopicResourceType(resourceLink.trim()),
-            url: resourceLink.trim().startsWith('http') ? resourceLink.trim() : '#',
-          }]
-        : []),
-    ]
+
+    const resources = finalResources.map((r) => ({
+      label: r.label,
+      type: r.type === 'link' ? ('link' as const) : ('file' as const),
+      url: r.url,
+    }))
+
     const payload = {
       title: title.trim(),
       description: description.trim(),
       category,
       tags,
-      prerequisites: editingTopic?.prerequisites ?? 'Không yêu cầu kiến thức nền.',
       resources,
       proposalReason: reason.trim(),
       windowHours: Number(durationHours),
-      windowLabel: Number(durationHours) >= 72 ? 'Chờ duyệt - window 3 ngày' : 'Chờ duyệt - window 2 ngày',
-      resourceFiles: uploadedFiles,
     }
     setSubmitting(true)
     try {
       if (isResubmitting && editingTopic) {
-        await topicService.resubmitProposal(editingTopic.id, payload)
+        await topicService.updateTopic(editingTopic._id, payload)
       } else {
-        await topicService.createProposal(payload)
+        await topicService.createTopic(payload)
       }
       setSubmitted(true)
     } finally {
@@ -686,14 +692,7 @@ export function CreateTopicPage() {
     }
   }
 
-  function addTag(value = tagDraft) {
-    const nextTag = value.trim()
-    if (!nextTag || tags.includes(nextTag) || tags.length >= 5) return
-    setTags((current) => [...current, nextTag])
-    setTagDraft('')
-  }
-
-  function handleFiles(files: FileList | null) {
+  const handleFiles = async (files: FileList | null) => {
     if (!files?.length) return
     const allowed = ['pdf', 'docx', 'md', 'txt', 'png', 'jpg', 'jpeg', 'webp']
     const picked = Array.from(files)
@@ -706,7 +705,19 @@ export function CreateTopicPage() {
       return
     }
     setErrors((current) => ({ ...current, resources: '' }))
-    setUploadedFiles((current) => [...current, ...picked].slice(0, 5))
+    try {
+      const uploaded = await Promise.all(picked.map((f) => uploadService.uploadFile(f)))
+      setUploadedResources((current) => [...current, ...uploaded].slice(0, 5))
+    } catch (e) {
+      setErrors((current) => ({ ...current, resources: (e as Error).message }))
+    }
+  }
+
+  function addTag(value = tagDraft) {
+    const nextTag = value.trim()
+    if (!nextTag || tags.includes(nextTag) || tags.length >= 5) return
+    setTags((current) => [...current, nextTag])
+    setTagDraft('')
   }
 
   if (submitted) return <TopicPendingPage />
@@ -721,20 +732,10 @@ export function CreateTopicPage() {
           title={isResubmitting ? 'Chỉnh sửa & gửi lại chủ đề' : 'Đề xuất chủ đề mới'}
           description={isResubmitting ? 'Cập nhật đề xuất theo phản hồi của admin, sau đó gửi lại vào hàng chờ duyệt.' : 'Gửi một chủ đề đủ nhỏ để cộng đồng có thể tự học, viết lại và dạy chéo trong thời gian giới hạn.'}
         />
-        {isResubmitting && editingTopic && (editingTopic.rejectionReason || editingTopic.revisionSuggestions?.length) && (
+        {isResubmitting && editingTopic && (editingTopic.rejectionReason) && (
           <div className="mt-5 rounded-md border border-error-container bg-error-container/25 p-4">
             <p className="text-sm font-extrabold text-error">Lý do bị từ chối</p>
             {editingTopic.rejectionReason && <p className="mt-2 text-sm font-semibold leading-6 text-error">{editingTopic.rejectionReason}</p>}
-            {!!editingTopic.revisionSuggestions?.length && (
-              <ul className="mt-3 grid gap-2 text-sm font-semibold text-error">
-                {editingTopic.revisionSuggestions.map((suggestion) => (
-                  <li key={suggestion} className="flex gap-2">
-                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-error" />
-                    <span>{suggestion}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
           </div>
         )}
         <form className="mt-6 grid gap-8" onSubmit={submit}>
@@ -828,46 +829,80 @@ export function CreateTopicPage() {
               <FieldHint error={errors.tags}>Tối đa 5 tags. Hiện tại: {tags.length}/5.</FieldHint>
             </label>
 
-            <div className="grid gap-3">
-              <label className="grid gap-1.5 text-sm font-semibold text-ink">
-                Link tài liệu
-                <input
-                  value={resourceLink}
-                  onChange={(event) => setResourceLink(event.target.value)}
-                  className={cn(
-                    'h-11 rounded-md border border-border bg-surface-low px-3 text-sm font-normal outline-none transition focus:border-secondary-container focus:bg-white focus:ring-2 focus:ring-secondary-container/15',
-                    errors.resources && 'border-error',
-                  )}
-                  placeholder="https://... hoặc ten-tai-lieu.md"
-                />
-              </label>
+            <div className="grid gap-4">
+              <div className="grid gap-3 rounded-md border border-border bg-surface-low p-4">
+                <p className="text-sm font-bold text-ink">Thêm link tài liệu tham khảo</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="grid gap-1.5 text-xs font-semibold text-ink-muted">
+                    Nhãn tài liệu (không bắt buộc)
+                    <input
+                      value={linkLabel}
+                      onChange={(event) => setLinkLabel(event.target.value)}
+                      onKeyDown={handleLinkKeyDown}
+                      className="h-10 rounded-md border border-border bg-white px-3 text-sm font-normal outline-none transition focus:border-secondary-container focus:ring-2 focus:ring-secondary-container/15"
+                      placeholder="Ví dụ: Trang chủ React"
+                    />
+                  </label>
+                  <label className="grid gap-1.5 text-xs font-semibold text-ink-muted">
+                    URL tài liệu
+                    <input
+                      value={linkUrl}
+                      onChange={(event) => setLinkUrl(event.target.value)}
+                      onKeyDown={handleLinkKeyDown}
+                      className={cn(
+                        'h-10 rounded-md border border-border bg-white px-3 text-sm font-normal outline-none transition focus:border-secondary-container focus:ring-2 focus:ring-secondary-container/15',
+                        errors.linkUrl && 'border-error'
+                      )}
+                      placeholder="https://react.dev"
+                    />
+                  </label>
+                </div>
+                {errors.linkUrl && <span className="text-xs font-semibold text-error">{errors.linkUrl}</span>}
+                <div className="flex justify-end">
+                  <Button type="button" size="sm" variant="secondary" onClick={handleAddLink}>
+                    <Icon name="check" size={14} className="mr-1" /> Thêm link
+                  </Button>
+                </div>
+              </div>
 
-              <label className="flex cursor-pointer items-center gap-3 rounded-md border border-dashed border-border bg-surface-low px-4 py-3 transition hover:border-secondary-container hover:bg-secondary-fixed/35">
-                <input
-                  type="file"
-                  multiple
-                  className="sr-only"
-                  accept=".pdf,.docx,.md,.txt,.png,.jpg,.jpeg,.webp"
-                  onChange={(event) => handleFiles(event.target.files)}
-                />
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white text-secondary-container shadow-card">
-                  <Icon name="upload" />
-                </span>
-                <span className="text-left">
-                  <span className="block text-sm font-bold text-ink">Kéo thả file hoặc bấm để tải lên</span>
-                  <span className="mt-0.5 block text-xs font-medium text-ink-subtle">PDF, PNG, JPG, WebP, DOCX, TXT, MD · tối đa 20MB.</span>
-                </span>
-              </label>
+              <div className="grid gap-1.5 text-sm font-semibold text-ink">
+                Tải lên tài liệu
+                <label className="flex cursor-pointer items-center gap-3 rounded-md border border-dashed border-border bg-surface-low px-4 py-3 transition hover:border-secondary-container hover:bg-secondary-fixed/35">
+                  <input
+                    type="file"
+                    multiple
+                    className="sr-only"
+                    accept=".pdf,.docx,.md,.txt,.png,.jpg,.jpeg,.webp"
+                    onChange={(event) => handleFiles(event.target.files)}
+                  />
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white text-secondary-container shadow-card">
+                    <Icon name="upload" />
+                  </span>
+                  <span className="text-left">
+                    <span className="block text-sm font-bold text-ink">Kéo thả file hoặc bấm để tải lên</span>
+                    <span className="mt-0.5 block text-xs font-medium text-ink-subtle">PDF, PNG, JPG, WebP, DOCX, TXT, MD · tối đa 20MB.</span>
+                  </span>
+                </label>
+              </div>
 
-              {!!uploadedFiles.length && (
+              {!!uploadedResources.length && (
                 <div className="grid gap-2">
-                  {uploadedFiles.map((file) => (
-                    <div key={file.name} className="flex items-center justify-between rounded-md border border-border-subtle bg-white px-3 py-2 text-sm">
+                  <p className="text-xs font-bold text-ink-muted">Danh sách tài liệu đã thêm:</p>
+                  {uploadedResources.map((file, idx) => (
+                    <div key={file.id || idx} className="flex items-center justify-between rounded-md border border-border-subtle bg-white px-3 py-2 text-sm shadow-sm">
                       <span className="inline-flex min-w-0 items-center gap-2 font-semibold text-ink">
-                        <Icon name="file" size={16} />
-                        <span className="truncate">{file.name}</span>
+                        <Icon name={file.type === 'link' ? 'link' : 'file'} size={16} />
+                        <span className="truncate">{file.label}</span>
+                        <span className="text-xs font-normal text-ink-subtle">({file.type})</span>
                       </span>
-                      <span className="shrink-0 text-xs font-bold text-ink-subtle">{formatLocalFileSize(file.size)}</span>
+                      <button
+                        type="button"
+                        className="flex h-7 w-7 items-center justify-center rounded-md text-ink-muted hover:bg-surface-low hover:text-error transition"
+                        onClick={() => setUploadedResources(current => current.filter((_, i) => i !== idx))}
+                        title="Xóa tài liệu"
+                      >
+                        <Icon name="close" size={14} />
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -903,7 +938,7 @@ export function CreateTopicPage() {
               <h3 className="text-base font-extrabold text-primary-container">Xem trước chủ đề</h3>
               <p className="mt-1 text-xs font-medium text-ink-muted">Hiển thị trong danh sách.</p>
             </div>
-            <Badge tone="warning">Chờ duyệt</Badge>
+            <Badge tone="warning">Chưa duyệt</Badge>
           </div>
           <div className="mt-4 rounded-md bg-surface-low p-4">
             <div className="flex items-center justify-between gap-2">
@@ -913,7 +948,7 @@ export function CreateTopicPage() {
             <h4 className="mt-3 line-clamp-2 text-lg font-extrabold leading-snug text-primary-container">{title || 'Tên chủ đề'}</h4>
             <p className="mt-2 line-clamp-3 text-sm leading-6 text-ink-muted">{description || 'Mô tả ngắn về mục tiêu học.'}</p>
             <div className="mt-3 flex flex-wrap gap-2">
-              {tags.length ? tags.map((tag) => <Badge key={tag}>{tag}</Badge>) : <Badge>Chưa có tag</Badge>}
+              {tags.length ? tags.map((tag) => <Badge key={tag}>{tag}</Badge>) : (uploadedResources.length ? uploadedResources.map((res) => <Badge key={res.id}>{res.label}</Badge>) : <Badge>Chưa có tag</Badge>)}
             </div>
           </div>
         </Card>
@@ -983,11 +1018,11 @@ function inferTopicResourceType(name: string) {
 
 export function TopicPendingPage() {
   const { id = 't4' } = useParams()
-  const topic = lookupService.getTopic(id)
+  const topic = topicFallback(id)
   return (
     <div className="mx-auto max-w-4xl">
       <Card className="p-8">
-        <Badge tone="warning">Đang chờ duyệt</Badge>
+        <Badge tone="warning">Chưa duyệt</Badge>
         <h1 className="mt-4 text-[34px] font-extrabold text-primary-container">{topic.title}</h1>
         <p className="mt-3 text-ink-muted">
           Admin đang kiểm tra phạm vi, tài liệu và window học. Bạn sẽ nhận thông báo khi đề xuất được duyệt hoặc cần chỉnh sửa.

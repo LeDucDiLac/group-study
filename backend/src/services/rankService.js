@@ -245,3 +245,17 @@ export async function adjustPointsByAdmin({ userId, actorId, delta, reason }) {
 
   return { applied: true, ...updated }
 }
+
+export default {
+  addPointsForCommentLike,
+  removePointsForCommentLikeCancellation,
+  addPointsForSubmissionApproved,
+  addPointsForSubmissionLike,
+  removePointsForSubmissionLikeCancellation,
+  addPointsForTopicApproved,
+  addPointsForTopicLike,
+  removePointsForTopicLikeCancellation,
+  addPointsForTopicSubmission,
+  addPointsForTopicComment,
+  adjustPointsByAdmin
+}
