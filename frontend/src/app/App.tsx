@@ -11,10 +11,12 @@ import { CreateTopicPage, MyTopicsPage, TopicDetailPage, TopicPendingPage, Topic
 import { ForgotPasswordPage, LandingPage, LoginPage, PublicTopicsPage } from '@/pages/public/PublicPages'
 import { authService } from '@/services/api'
 import type { User } from '@/types/domain'
+import { AvatarCacheProvider } from '@/contexts/AvatarCacheContext'
 
 export function App() {
   return (
-    <Routes>
+    <AvatarCacheProvider>
+      <Routes>
       <Route element={<PublicLayout />}>
         <Route index element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
@@ -45,6 +47,7 @@ export function App() {
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </AvatarCacheProvider>
   )
 }
 

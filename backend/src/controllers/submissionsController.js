@@ -194,8 +194,18 @@ export async function getSubmissionComments(req, res, next) {
         return res.status(403).json({ error: 'Bạn cần nộp bài trước khi xem bình luận.' })
       }
     }
-
-    return res.json({ comments: submission.comments || [] })
+    const normalizedComments = submission.comments.map(async (comment) => {
+      const user = comment.isAnonymous ? null : await publicInfo(comment.userId)
+      delete comment.userId
+      const normalizedSubComments = comment.subComments ? await Promise.all(comment.subComments.map(async (sub) => {
+        const subUser = sub.isAnonymous ? null : await publicInfo(sub.userId)
+        delete sub.userId
+        return { ...sub, user: subUser }
+      })) : []
+      return { ...comment, user: user, subComments: normalizedSubComments }
+    })
+    const commentsWithUser = await Promise.all(normalizedComments)
+    return res.json({ comments: commentsWithUser })
   } catch (error) {
     return next(error)
   }
@@ -323,9 +333,7 @@ export async function listTopicSubmissions(req, res, next) {
       ? topic.submissions.some((submission) =>
         submission.userId && submission.userId.toString() === userId
       )
-      : 
-    console.log("Topic: ", topic)
-    console.log(String(topic.createdBy), String(userId))
+      : false
     if (!hasSubmitted && topic.status !== 'Đã hoàn thành' && String(topic.createdBy) !== String(userId)) {
       const user = await User.findById(userObjectId).select('rank').lean()
       if (!user) {

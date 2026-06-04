@@ -16,8 +16,32 @@ export interface ProfileStats {
   createdTopicCount: number
   bookmarkCount: number
   submissionLikeCount: number
-  answerCount: number
-  answerLikeCount: number
+  likedCount: number
+}
+
+export interface RecentActivity {
+  _id: string
+  title: string
+  target?: {
+    topicId?: string
+    submissionId?: string
+    commentId?: string
+    subCommentId?: string
+  }
+  createdAt: string
+}
+
+export interface SelfProfile extends User {
+  bio?: string
+  summary: {
+    topicsParticipated: { topicId: string }[]
+    topicsCreated: { topicId: string }[]
+    bookmarks: { topicId?: string; submissionId?: string; commentId?: string }[]
+    likesReceived: number
+    liked: { topicId: string; submissionId?: string; commentId?: string }[]
+    submissions: { topicId: string; submissionId: string }[]
+  }
+  recentActivity: RecentActivity[]
 }
 
 export interface ResourceFile {
@@ -69,10 +93,16 @@ export interface Submission {
 export interface Comment {
   id: string
   submissionId: string
-  userId: string
+  user: {
+    id: string
+    displayName: string
+    rank: number
+  }
+  isAnonymous: boolean
   parentId?: string
   content: string
   likeCount: number
+  dislikeCount: number
   createdAt: string
 }
 

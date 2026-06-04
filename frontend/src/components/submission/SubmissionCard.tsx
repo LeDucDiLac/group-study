@@ -4,7 +4,19 @@ import { ContributionBadge } from '@/components/badge/ContributionBadge'
 import type { Submission, User } from '@/types/domain'
 import { minutesToReadable } from '@/utils/format'
 
-export function SubmissionCard({ submission, author, to }: { submission: Submission; author: User; to: string }) {
+export function SubmissionCard({
+  submission,
+  author,
+  to,
+  saved = false,
+  onToggleBookmark,
+}: {
+  submission: Submission
+  author: User
+  to: string
+  saved?: boolean
+  onToggleBookmark?: () => void | Promise<void>
+}) {
   return (
     <Card className="p-5">
       <div className="flex items-start justify-between gap-4">
@@ -17,6 +29,22 @@ export function SubmissionCard({ submission, author, to }: { submission: Submiss
             </div>
           </div>
         </div>
+        {onToggleBookmark && (
+          <button
+            type="button"
+            onClick={onToggleBookmark}
+            aria-pressed={saved}
+            aria-label={saved ? 'Bỏ lưu bài này' : 'Lưu bài này'}
+            className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-bold transition ${
+              saved
+                ? 'border-secondary-container bg-secondary-fixed text-secondary-container'
+                : 'border-border-subtle bg-white text-ink-subtle hover:border-secondary-container hover:text-secondary-container'
+            }`}
+          >
+            <Icon name={saved ? 'liked' : 'heart'} size={13} />
+            {saved ? 'Đã lưu' : 'Lưu'}
+          </button>
+        )}
       </div>
       <div className="mt-4 grid gap-3 text-sm text-ink-muted">
         <p><span className="font-bold text-ink">Đã hiểu:</span> {submission.understood}</p>

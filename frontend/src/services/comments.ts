@@ -8,9 +8,15 @@ export function flattenComments(dbComments: any[], parentId?: string, submission
     flat.push({
       id: commentId,
       submissionId: submissionId || '',
-      userId: String(c.userId || c.createdBy || ''),
+      user: {
+        id: String(c.user?._id || c.user?.id || c.userId || c.createdBy || ''),
+        displayName: c.user?.displayName || 'Người học',
+        rank: c.user?.rank ?? 0,
+      },
+      isAnonymous: Boolean(c.isAnonymous),
       content: c.content,
       likeCount: c.reactions?.like?.length || 0,
+      dislikeCount: c.reactions?.dislike?.length || 0,
       createdAt: c.createdAt || new Date().toISOString(),
       parentId,
     });
@@ -43,6 +49,7 @@ export const commentService = {
     content: string,
     topicId?: string,
     parentId?: string,
+    isAnonymous = false,
   ): Promise<Comment> => {
     const res = await apiRequest<{ comment: any }>('/api/comments', {
       method: 'POST',
@@ -50,6 +57,7 @@ export const commentService = {
         topicId,
         submissionId,
         content,
+        isAnonymous,
         ...(parentId ? { commentId: parentId } : {}),
       }),
     });
@@ -57,9 +65,15 @@ export const commentService = {
     return {
       id: String(c._id || c.id),
       submissionId,
-      userId: String(c.userId || c.createdBy || ''),
+      user: {
+        id: String(c.user?._id || c.user?.id || c.userId || c.createdBy || ''),
+        displayName: c.user?.displayName || 'Người học',
+        rank: c.user?.rank ?? 0,
+      },
+      isAnonymous,
       content: c.content,
       likeCount: 0,
+      dislikeCount: 0,
       createdAt: c.createdAt || new Date().toISOString(),
       parentId,
     };
@@ -71,8 +85,9 @@ export const commentService = {
     parentId: string,
     content: string,
     topicId?: string,
+    isAnonymous = false,
   ): Promise<Comment> => {
-    return commentService.createComment(submissionId, content, topicId, parentId);
+    return commentService.createComment(submissionId, content, topicId, parentId, isAnonymous);
   },
 
   /** POST /api/reactions/like hoặc /cancel cho comment */
@@ -85,6 +100,19 @@ export const commentService = {
   ): Promise<void> => {
     const body = JSON.stringify({ id: commentId, submissionId, topicId, subCommentId });
     const endpoint = alreadyLiked ? '/api/reactions/cancel' : '/api/reactions/like';
+    await apiRequest(endpoint, { method: 'POST', body });
+  },
+
+  /** POST /api/reactions/dislike hoặc /cancel cho comment */
+  toggleDislike: async (
+    commentId: string,
+    alreadyDisliked: boolean,
+    submissionId?: string,
+    topicId?: string,
+    subCommentId?: string,
+  ): Promise<void> => {
+    const body = JSON.stringify({ id: commentId, submissionId, topicId, subCommentId });
+    const endpoint = alreadyDisliked ? '/api/reactions/cancel' : '/api/reactions/dislike';
     await apiRequest(endpoint, { method: 'POST', body });
   },
 };

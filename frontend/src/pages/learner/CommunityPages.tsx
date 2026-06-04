@@ -14,11 +14,12 @@ import {
   topicService,
   userFallback,
 } from '@/services/api'
-import type { BookmarkItem } from '@/services/bookmarks'
+import type { BookmarkItem, BookmarkContent, BookmarkTopicContent, BookmarkSubmissionContent, BookmarkCommentContent } from '@/services/bookmarks'
 import type { Comment, Deadline, Notification, ProfileStats, Submission, Topic, User } from '@/types/domain'
 import { RANK_LABELS, getRankTier } from '@/utils/badges'
 import { formatDateTime } from '@/utils/format'
 import { useAsync } from '@/utils/hooks'
+import { useAvatarCache } from '@/contexts/AvatarCacheContext'
 
 const fallbackProfileUser: User = {
   id: 'loading',
@@ -45,6 +46,7 @@ export function PeerLearningPage() {
   const mySubmission = topic.mySubmission
   const { data: currentUser } = useAsync(() => authService.getSessionUser(), null)
   const { data: submissions, loading } = useAsync(() => submissionService.getSubmissionsByTopic(id), [], [id])
+  const { data: bookmarks, setData: setBookmarks } = useAsync(() => bookmarkService.getBookmarks(), [])
 
   // Chủ topic được phép xem dạy chéo mà không cần nộp bài
   const creatorId = typeof topic.createdBy === 'object' ? (topic.createdBy as any)._id : topic.createdBy
@@ -58,6 +60,16 @@ export function PeerLearningPage() {
     if (sortBy === 'likes') return b.likeCount - a.likeCount
     return b.likeCount + b.commentCount - (a.likeCount + a.commentCount)
   })
+
+  async function handleToggleSubmissionBookmark(submissionId: string) {
+    const result = await bookmarkService.toggleBookmark(submissionId, bookmarks)
+    if (result.saved && result.item) {
+      setBookmarks((prev) => [...prev, result.item!])
+    } else {
+      const updated = await bookmarkService.getBookmarks()
+      setBookmarks(updated)
+    }
+  }
 
   if (accessDenied) {
     return (
@@ -92,6 +104,8 @@ export function PeerLearningPage() {
                 submission={submission}
                 author={submission.user ?? fallbackProfileUser}
                 to={`/topics/${id}/peer/${submission._id}`}
+                saved={bookmarkService.isBookmarked(bookmarks, submission._id)}
+                onToggleBookmark={() => handleToggleSubmissionBookmark(submission._id)}
               />
             )
           })
@@ -226,7 +240,7 @@ function SortBar({ count, sortBy, onSortChange }: { count: number; sortBy: strin
   )
 }
 
-function PeerSubmissionCard({ submission, author, to }: { submission: Submission; author: User; to: string }) {
+function PeerSubmissionCard({ submission, author, to, saved = false, onToggleBookmark }: { submission: Submission; author: User; to: string; saved?: boolean; onToggleBookmark?: () => void | Promise<void> }) {
   const rankTier = getRankTier(author.rank)
   const roleLabel = RANK_LABELS[rankTier]
   const roleTone = rankTier >= 9 ? 'warning' : rankTier >= 7 ? 'brand' : rankTier >= 5 ? 'success' : rankTier >= 3 ? 'info' : 'neutral'
@@ -338,6 +352,22 @@ function PeerSubmissionCard({ submission, author, to }: { submission: Submission
           >
             <Icon name="brokenHeart" size={15} />
             {disliked ? `Đã không thích · ${displayDislikeCount}` : `Không thích · ${displayDislikeCount}`}
+          </button>
+        )}
+        {onToggleBookmark && (
+          <button
+            type="button"
+            className={`inline-flex h-9 items-center justify-center gap-2 rounded-md border px-3 text-sm font-bold transition whitespace-nowrap ${
+              saved
+                ? 'border-secondary-container bg-secondary-fixed text-secondary-container'
+                : 'border-border bg-white text-ink hover:border-secondary-container hover:bg-secondary-fixed hover:text-secondary-container'
+            }`}
+            onClick={onToggleBookmark}
+            aria-pressed={saved}
+            aria-label={saved ? 'Bỏ lưu bài này' : 'Lưu bài này'}
+          >
+            <Icon name={saved ? 'liked' : 'heart'} size={15} />
+            {saved ? 'Đã lưu' : 'Lưu bài'}
           </button>
         )}
         <Link
@@ -485,7 +515,10 @@ function CommentSection({ submission, author, topicId }: { submission: Submissio
   const { data: flatComments, loading } = useAsync(() => commentService.getComments(submission._id, topicId), [], [submission._id, topicId])
   const [comments, setComments] = useState<ThreadComment[]>([])
   const [draft, setDraft] = useState('')
+  const [isAnonymous, setIsAnonymous] = useState(false)
   const [likedCommentIds, setLikedCommentIds] = useState<string[]>([])
+  const [dislikedCommentIds, setDislikedCommentIds] = useState<string[]>([])
+  const { data: bookmarks, setData: setBookmarks } = useAsync(() => bookmarkService.getBookmarks(), [])
 
   useEffect(() => {
     setComments(buildCommentTree(flatComments, author))
@@ -496,27 +529,51 @@ function CommentSection({ submission, author, topicId }: { submission: Submissio
   async function addRootComment() {
     const content = draft.trim()
     if (!content) return
-    const created = await commentService.createComment(submission._id, content, topicId)
-    setComments((current) => [{ ...created, author: currentUser, replies: [] }, ...current])
+    const created = await commentService.createComment(submission._id, content, topicId, undefined, isAnonymous)
+    setComments((current) => [{
+      ...created,
+      author: isAnonymous
+        ? { id: currentUser.id, displayName: 'Người học ẩn danh', email: '', role: 'learner' as const, rank: 0 }
+        : currentUser,
+      replies: [],
+    }, ...current])
     setDraft('')
   }
 
-  async function addReply(parentId: string, content: string) {
-    const created = await commentService.createReply(submission._id, parentId, content, topicId)
-    setComments((current) => addReplyToThread(current, parentId, { ...created, author: currentUser, replies: [] }))
+  async function addReply(parentId: string, content: string, replyAnonymous = false) {
+    const created = await commentService.createReply(submission._id, parentId, content, topicId, replyAnonymous)
+    setComments((current) => addReplyToThread(current, parentId, {
+      ...created,
+      author: replyAnonymous
+        ? { id: currentUser.id, displayName: 'Người học ẩn danh', email: '', role: 'learner' as const, rank: 0 }
+        : currentUser,
+      replies: [],
+    }))
   }
 
   async function toggleLike(comment: ThreadComment) {
-    if (comment.userId === currentUser.id) return
+    if (comment.user.id === currentUser.id) return
     const commentId = comment.id
     const alreadyLiked = likedCommentIds.includes(commentId)
     setLikedCommentIds((current) => (alreadyLiked ? current.filter((id) => id !== commentId) : [...current, commentId]))
-    setComments((current) =>
-      updateThreadComment(current, commentId, (comment) => ({
-        ...comment,
-        likeCount: Math.max(0, comment.likeCount + (alreadyLiked ? -1 : 1)),
-      })),
-    )
+    // Nếu đang like thì bỏ dislike (nếu có)
+    if (!alreadyLiked && dislikedCommentIds.includes(commentId)) {
+      setDislikedCommentIds((current) => current.filter((id) => id !== commentId))
+      setComments((current) =>
+        updateThreadComment(current, commentId, (comment) => ({
+          ...comment,
+          likeCount: comment.likeCount + 1,
+          dislikeCount: Math.max(0, comment.dislikeCount - 1),
+        })),
+      )
+    } else {
+      setComments((current) =>
+        updateThreadComment(current, commentId, (comment) => ({
+          ...comment,
+          likeCount: Math.max(0, comment.likeCount + (alreadyLiked ? -1 : 1)),
+        })),
+      )
+    }
     try {
       await commentService.toggleLike(commentId, alreadyLiked, submission._id)
     } catch {
@@ -525,6 +582,52 @@ function CommentSection({ submission, author, topicId }: { submission: Submissio
         updateThreadComment(current, commentId, (comment) => ({
           ...comment,
           likeCount: Math.max(0, comment.likeCount + (alreadyLiked ? 1 : -1)),
+        })),
+      )
+    }
+  }
+
+  async function toggleCommentBookmark(commentId: string) {
+    const result = await bookmarkService.toggleBookmark(commentId, bookmarks)
+    if (result.saved && result.item) {
+      setBookmarks((prev) => [...prev, result.item!])
+    } else {
+      const updated = await bookmarkService.getBookmarks()
+      setBookmarks(updated)
+    }
+  }
+
+  async function toggleDislike(comment: ThreadComment) {
+    if (comment.user.id === currentUser.id) return
+    const commentId = comment.id
+    const alreadyDisliked = dislikedCommentIds.includes(commentId)
+    setDislikedCommentIds((current) => (alreadyDisliked ? current.filter((id) => id !== commentId) : [...current, commentId]))
+    // Nếu đang dislike thì bỏ like (nếu có)
+    if (!alreadyDisliked && likedCommentIds.includes(commentId)) {
+      setLikedCommentIds((current) => current.filter((id) => id !== commentId))
+      setComments((current) =>
+        updateThreadComment(current, commentId, (c) => ({
+          ...c,
+          likeCount: Math.max(0, c.likeCount - 1),
+          dislikeCount: c.dislikeCount + 1,
+        })),
+      )
+    } else {
+      setComments((current) =>
+        updateThreadComment(current, commentId, (c) => ({
+          ...c,
+          dislikeCount: Math.max(0, c.dislikeCount + (alreadyDisliked ? -1 : 1)),
+        })),
+      )
+    }
+    try {
+      await commentService.toggleDislike(commentId, alreadyDisliked, submission._id)
+    } catch {
+      setDislikedCommentIds((current) => (alreadyDisliked ? [...current, commentId] : current.filter((id) => id !== commentId)))
+      setComments((current) =>
+        updateThreadComment(current, commentId, (c) => ({
+          ...c,
+          dislikeCount: Math.max(0, c.dislikeCount + (alreadyDisliked ? 1 : -1)),
         })),
       )
     }
@@ -554,6 +657,8 @@ function CommentSection({ submission, author, topicId }: { submission: Submissio
         value={draft}
         onChange={setDraft}
         onSubmit={addRootComment}
+        isAnonymous={isAnonymous}
+        onAnonymousChange={setIsAnonymous}
         authorName={currentUser.displayName}
         authorId={currentUser.id}
         placeholder="Viết bình luận hoặc đặt câu hỏi..."
@@ -566,9 +671,13 @@ function CommentSection({ submission, author, topicId }: { submission: Submissio
               key={comment.id}
               comment={comment}
               likedCommentIds={likedCommentIds}
+              dislikedCommentIds={dislikedCommentIds}
               currentUserId={currentUser.id}
               onReply={addReply}
               onLike={toggleLike}
+              onDislike={toggleDislike}
+              bookmarks={bookmarks}
+              onToggleBookmark={toggleCommentBookmark}
             />
           ))
         ) : loading || submission.commentCount > 0 ? (
@@ -589,6 +698,8 @@ function CommentComposer({
   authorId,
   placeholder,
   onCancel,
+  isAnonymous = false,
+  onAnonymousChange,
   compact = false,
 }: {
   value: string
@@ -598,11 +709,14 @@ function CommentComposer({
   authorId?: string
   placeholder: string
   onCancel?: () => void
+  isAnonymous?: boolean
+  onAnonymousChange?: (value: boolean) => void
   compact?: boolean
 }) {
+  const displayName = isAnonymous ? 'Người học ẩn danh' : authorName
   return (
     <div className={`mt-4 flex items-start gap-3 rounded-md border border-border-subtle bg-white p-3 ${compact ? 'ml-0' : ''}`}>
-      <Avatar name={authorName} size="sm" userId={authorId} />
+      <Avatar name={displayName} size="sm" userId={isAnonymous ? undefined : authorId} anonymous={isAnonymous} />
       <div className="min-w-0 flex-1">
         <Textarea
           value={value}
@@ -613,15 +727,28 @@ function CommentComposer({
           placeholder={placeholder}
           className="min-h-[76px] bg-surface-low"
         />
-        <div className="mt-2 flex justify-end gap-2">
-          {onCancel && (
-            <Button variant="ghost" size="sm" onClick={onCancel}>
-              Hủy
-            </Button>
+        <div className="mt-2 flex items-center justify-between gap-2">
+          {onAnonymousChange && (
+            <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-ink-muted select-none">
+              <input
+                type="checkbox"
+                checked={isAnonymous}
+                onChange={(e) => onAnonymousChange(e.target.checked)}
+                className="h-4 w-4 rounded border-border accent-secondary-container cursor-pointer"
+              />
+              Ẩn danh
+            </label>
           )}
-          <Button size="sm" disabled={!value.trim()} onClick={onSubmit}>
-            Gửi
-          </Button>
+          <div className="ml-auto flex gap-2">
+            {onCancel && (
+              <Button variant="ghost" size="sm" onClick={onCancel}>
+                Hủy
+              </Button>
+            )}
+            <Button size="sm" disabled={!value.trim()} onClick={onSubmit}>
+              Gửi
+            </Button>
+          </div>
         </div>
       </div>
     </div>
@@ -631,30 +758,45 @@ function CommentComposer({
 function CommentItem({
   comment,
   likedCommentIds,
+  dislikedCommentIds = [],
   currentUserId,
   onReply,
   onLike,
+  onDislike,
+  bookmarks = [],
+  onToggleBookmark,
   depth = 0,
 }: {
   comment: ThreadComment
   likedCommentIds: string[]
+  dislikedCommentIds?: string[]
   currentUserId: string
-  onReply: (parentId: string, content: string) => void | Promise<void>
+  onReply: (parentId: string, content: string, isAnonymous?: boolean) => void | Promise<void>
   onLike: (comment: ThreadComment) => void | Promise<void>
+  onDislike?: (comment: ThreadComment) => void | Promise<void>
+  bookmarks?: BookmarkItem[]
+  onToggleBookmark?: (commentId: string) => void | Promise<void>
   depth?: number
 }) {
   const [replyOpen, setReplyOpen] = useState(false)
   const [replyDraft, setReplyDraft] = useState('')
+  const [replyAnonymous, setReplyAnonymous] = useState(false)
   const [repliesOpen, setRepliesOpen] = useState(true)
   const visibleReplies = repliesOpen ? comment.replies : comment.replies.slice(0, 0)
   const liked = likedCommentIds.includes(comment.id)
-  const isOwnComment = currentUserId === comment.userId
+  const disliked = dislikedCommentIds.includes(comment.id)
+  const isOwnComment = currentUserId === comment.user.id
+  const savedComment = bookmarkService.isBookmarked(bookmarks, comment.id)
+  const isSubComment = depth > 0
+
+  const displayName = comment.isAnonymous ? 'Người học ẩn danh' : comment.author.displayName
 
   async function submitReply() {
     const content = replyDraft.trim()
     if (!content) return
-    await onReply(comment.id, content)
+    await onReply(comment.id, content, replyAnonymous)
     setReplyDraft('')
+    setReplyAnonymous(false)
     setReplyOpen(false)
     setRepliesOpen(true)
   }
@@ -663,32 +805,59 @@ function CommentItem({
     <article className={depth ? 'ml-5 border-l border-border-subtle pl-4 md:ml-8' : ''}>
       <div className="rounded-md border border-border-subtle bg-white p-4">
         <div className="flex items-start gap-3">
-          <Avatar name={comment.author.displayName} size="sm" userId={comment.author.id} />
+          <Avatar name={displayName} size="sm" userId={comment.isAnonymous ? undefined : comment.author.id} anonymous={comment.isAnonymous} />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="font-bold text-ink">{comment.author.displayName}</p>
-              <ContributionBadge rank={comment.author.rank} compact />
+              <p className="font-bold text-ink">{displayName}</p>
+              {!comment.isAnonymous && <ContributionBadge rank={comment.author.rank} compact />}
               <span className="text-xs font-semibold text-ink-subtle">{formatDateTime(comment.createdAt)}</span>
             </div>
             <p className="mt-2 text-sm leading-6 text-ink-muted">{comment.content}</p>
             <div className="mt-3 flex flex-wrap items-center gap-3 text-sm font-bold">
+              {/* Thích */}
               <button
                 type="button"
-                className={`focus-ring rounded-sm ${liked ? 'text-secondary-container' : 'text-ink-muted hover:text-secondary-container'} disabled:cursor-not-allowed disabled:text-ink-subtle`}
+                className={`focus-ring inline-flex items-center gap-1 rounded-sm ${liked ? 'text-secondary-container' : 'text-ink-muted hover:text-secondary-container'} disabled:cursor-not-allowed disabled:text-ink-subtle`}
                 onClick={() => onLike(comment)}
                 disabled={isOwnComment}
                 aria-pressed={liked}
-                aria-label={isOwnComment ? 'Không thể thích bình luận của bạn' : liked ? `Bỏ thích bình luận của ${comment.author.displayName}` : `Thích bình luận của ${comment.author.displayName}`}
+                aria-label={isOwnComment ? 'Không thể thích bình luận của bạn' : liked ? 'Bỏ thích' : 'Thích'}
               >
                 {liked ? 'Đã thích' : 'Thích'}
+                <span className="text-ink-subtle font-semibold">· {comment.likeCount}</span>
               </button>
-              <button type="button" className="text-ink-muted hover:text-secondary-container focus-ring rounded-sm" onClick={() => setReplyOpen(true)}>
-                Trả lời
-              </button>
-              <button type="button" className="text-ink-muted hover:text-secondary-container focus-ring rounded-sm">
-                Báo cáo
-              </button>
-              <span className="text-ink-subtle">{comment.likeCount} lượt thích</span>
+              {/* Không thích */}
+              {onDislike && (
+                <button
+                  type="button"
+                  className={`focus-ring inline-flex items-center gap-1 rounded-sm ${disliked ? 'text-error' : 'text-ink-muted hover:text-error'} disabled:cursor-not-allowed disabled:text-ink-subtle`}
+                  onClick={() => onDislike(comment)}
+                  disabled={isOwnComment}
+                  aria-pressed={disliked}
+                  aria-label={isOwnComment ? 'Không thể phản ứng bình luận của bạn' : disliked ? 'Bỏ không thích' : 'Không thích'}
+                >
+                  {disliked ? 'Đã không thích' : 'Không thích'}
+                  <span className="text-ink-subtle font-semibold">· {comment.dislikeCount}</span>
+                </button>
+              )}
+              {/* Trả lời — chỉ hiện ở comment gốc (depth = 0) */}
+              {!isSubComment && (
+                <button type="button" className="text-ink-muted hover:text-secondary-container focus-ring rounded-sm" onClick={() => setReplyOpen(true)}>
+                  Trả lời
+                </button>
+              )}
+              {/* Lưu */}
+              {onToggleBookmark && (
+                <button
+                  type="button"
+                  className={`focus-ring rounded-sm ${savedComment ? 'text-secondary-container' : 'text-ink-muted hover:text-secondary-container'}`}
+                  onClick={() => onToggleBookmark(comment.id)}
+                  aria-pressed={savedComment}
+                  aria-label={savedComment ? 'Bỏ lưu bình luận này' : 'Lưu bình luận này'}
+                >
+                  {savedComment ? 'Đã lưu' : 'Lưu'}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -700,10 +869,12 @@ function CommentItem({
           value={replyDraft}
           onChange={setReplyDraft}
           onSubmit={submitReply}
-          onCancel={() => setReplyOpen(false)}
+          onCancel={() => { setReplyOpen(false); setReplyAnonymous(false) }}
           authorName={userFallback(currentUserId).displayName}
           authorId={currentUserId}
-          placeholder={`Trả lời ${comment.author.displayName}...`}
+          isAnonymous={replyAnonymous}
+          onAnonymousChange={setReplyAnonymous}
+          placeholder={`Trả lời ${displayName}...`}
         />
       )}
 
@@ -721,9 +892,13 @@ function CommentItem({
               key={reply.id}
               comment={reply}
               likedCommentIds={likedCommentIds}
+              dislikedCommentIds={dislikedCommentIds}
               currentUserId={currentUserId}
               onReply={onReply}
               onLike={onLike}
+              onDislike={onDislike}
+              bookmarks={bookmarks}
+              onToggleBookmark={onToggleBookmark}
               depth={Math.min(depth + 1, 2)}
             />
           ))}
@@ -765,7 +940,13 @@ function countCommentEngagement(comment: ThreadComment): number {
 function buildCommentTree(comments: Comment[], fallbackAuthor: User): ThreadComment[] {
   const nodes = comments.map((comment) => ({
     ...comment,
-    author: userFallback(comment.userId) ?? fallbackAuthor,
+    author: {
+      id: comment.user.id,
+      displayName: comment.user.displayName,
+      rank: comment.user.rank,
+      email: '',
+      role: 'learner' as const,
+    },
     replies: [],
   })) as ThreadComment[]
   const byId = new Map(nodes.map((comment) => [comment.id, comment]))
@@ -800,41 +981,222 @@ function updateThreadComment(comments: ThreadComment[], commentId: string, updat
 }
 
 export function ProfilePage() {
-  const { data: user } = useAsync(() => authService.getSessionUser().then(u => u ?? fallbackProfileUser), fallbackProfileUser)
-  const { data: stats } = useAsync(
-    () => user.id && user.id !== 'loading' ? profileService.getProfileStats(user.id) : Promise.resolve(fallbackProfileStats),
-    fallbackProfileStats,
-    [user.id],
-  )
-  return (
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
-      <Card className="p-6">
-        <Avatar name={user.displayName} size="lg" userId={user.id} />
-        <h1 className="mt-4 text-2xl font-extrabold text-primary-container">{user.displayName}</h1>
-        <p className="text-sm text-ink-muted">{user.email}</p>
-        <div className="mt-4"><ContributionBadge rank={user.rank} /></div>
-        <div className="mt-5 flex flex-wrap gap-2">{(user as any).interests?.map((interest: string) => <Badge key={interest}>{interest}</Badge>)}</div>
-      </Card>
-      <div className="space-y-5">
-        <BadgeProgressCard rank={user.rank} />
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <Card className="p-4"><p className="text-2xl font-extrabold">{stats.joinedTopicCount}</p><p className="text-sm text-ink-muted">chủ đề tham gia</p></Card>
-          <Card className="p-4"><p className="text-2xl font-extrabold">{stats.submissionCount}</p><p className="text-sm text-ink-muted">bài đã nộp</p></Card>
-          <Card className="p-4"><p className="text-2xl font-extrabold">{stats.submissionLikeCount}</p><p className="text-sm text-ink-muted">like bài nhận được</p></Card>
-          <Card className="p-4"><p className="text-2xl font-extrabold">{stats.answerCount}</p><p className="text-sm text-ink-muted">câu trả lời</p></Card>
-          <Card className="p-4"><p className="text-2xl font-extrabold">{stats.answerLikeCount}</p><p className="text-sm text-ink-muted">like câu trả lời</p></Card>
-          <Card className="p-4"><p className="text-2xl font-extrabold">{stats.createdTopicCount}</p><p className="text-sm text-ink-muted">chủ đề đã tạo</p></Card>
-          <Card className="p-4"><p className="text-2xl font-extrabold">{stats.bookmarkCount}</p><p className="text-sm text-ink-muted">bài đã lưu</p></Card>
+  const { data: profile, setData: setProfile, loading } = useAsync(() => profileService.getSelfProfile(), null as any)
+  const { bumpVersion } = useAvatarCache()
+
+  // Edit profile modal state
+  const [editOpen, setEditOpen] = useState(false)
+  const [editName, setEditName] = useState('')
+  const [editBio, setEditBio] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
+
+  // Avatar upload state
+  const [avatarUploading, setAvatarUploading] = useState(false)
+
+  function openEdit() {
+    setEditName(profile?.displayName ?? '')
+    setEditBio(profile?.bio ?? '')
+    setEditOpen(true)
+  }
+
+  async function saveProfile() {
+    if (!profile || !editName.trim()) return
+    setEditSaving(true)
+    try {
+      const updated = await profileService.updateProfile(profile.id, { displayName: editName.trim(), bio: editBio.trim() })
+      setProfile({ ...profile, displayName: updated.displayName, bio: editBio.trim() })
+      setEditOpen(false)
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
+  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !profile) return
+    setAvatarUploading(true)
+    try {
+      await profileService.updateAvatar(profile.id, file)
+      // Bump version để tất cả Avatar component (kể cả nav) tự reload ảnh mới
+      bumpVersion()
+    } finally {
+      setAvatarUploading(false)
+      e.target.value = ''
+    }
+  }
+
+  if (loading || !profile) {
+    return (
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <Card className="p-6">
+          <div className="h-20 w-20 animate-pulse rounded-full bg-surface-container" />
+          <div className="mt-4 h-6 w-40 animate-pulse rounded bg-surface-container" />
+          <div className="mt-2 h-4 w-56 animate-pulse rounded bg-surface-low" />
+        </Card>
+        <div className="space-y-5">
+          <div className="h-24 animate-pulse rounded-md bg-surface-low" />
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+            {[...Array(6)].map((_, i) => <div key={i} className="h-20 animate-pulse rounded-md bg-surface-low" />)}
+          </div>
         </div>
-        <Card className="p-5">
-          <h2 className="text-xl font-extrabold text-primary-container">Hoạt động gần đây</h2>
-          <div className="mt-4 space-y-3 text-sm text-ink-muted">
-            <p>Đã nộp bài Python Cơ Bản - List, Dict và Vòng lặp.</p>
-            <p>Đã trả lời câu hỏi về epsilon-delta trong chủ đề Giải Tích 1.</p>
-            <p>Đã lưu bài giải thích của Trần Quốc Hùng.</p>
+      </div>
+    )
+  }
+
+  const stats = {
+    joinedTopicCount: profile.summary.topicsParticipated.length,
+    submissionCount: profile.summary.submissions.length,
+    createdTopicCount: profile.summary.topicsCreated.length,
+    bookmarkCount: profile.summary.bookmarks.length,
+    likesReceived: profile.summary.likesReceived,
+    likedCount: profile.summary.liked.length,
+  }
+
+  const statItems = [
+    { value: stats.joinedTopicCount, label: 'Chủ đề tham gia', icon: 'users' as const },
+    { value: stats.submissionCount, label: 'Bài đã nộp', icon: 'file' as const },
+    { value: stats.createdTopicCount, label: 'Chủ đề đã tạo', icon: 'check' as const },
+    { value: stats.likesReceived, label: 'Lượt thích nhận được', icon: 'heart' as const },
+    { value: stats.likedCount, label: 'Nội dung đã thích', icon: 'liked' as const },
+    { value: stats.bookmarkCount, label: 'Đã lưu', icon: 'heart' as const },
+  ]
+
+  return (
+    <div className="grid grid-cols-1 gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
+      {/* Cột trái — thông tin cá nhân */}
+      <div className="space-y-5">
+        <Card className="p-6">
+          {/* Avatar + upload */}
+          <div className="relative w-fit">
+            <Avatar name={profile.displayName} size="lg" userId={profile.id} />
+            <label
+              className="absolute -bottom-1 -right-1 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border-2 border-white bg-secondary-container text-white shadow transition hover:opacity-80"
+              title="Đổi ảnh đại diện"
+              aria-label="Đổi ảnh đại diện"
+            >
+              {avatarUploading
+                ? <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                : <Icon name="check" size={12} />
+              }
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleAvatarChange}
+                disabled={avatarUploading}
+              />
+            </label>
+          </div>
+
+          <div className="mt-4 flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h1 className="text-2xl font-extrabold text-primary-container">{profile.displayName}</h1>
+              <p className="mt-0.5 text-sm text-ink-muted">{profile.email}</p>
+            </div>
+            <Button variant="secondary" size="sm" onClick={openEdit} className="shrink-0">
+              Sửa
+            </Button>
+          </div>
+
+          {profile.bio && (
+            <p className="mt-3 text-sm leading-6 text-ink-muted">{profile.bio}</p>
+          )}
+
+          <div className="mt-4">
+            <ContributionBadge rank={profile.rank} />
           </div>
         </Card>
+
+        {/* Cấp bậc */}
+        <BadgeProgressCard rank={profile.rank} />
       </div>
+
+      {/* Cột phải — thống kê + hoạt động */}
+      <div className="space-y-5">
+        {/* Stats grid */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {statItems.map(({ value, label, icon }) => (
+            <Card key={label} className="flex flex-col gap-1 p-4">
+              <div className="flex items-center gap-2">
+                <Icon name={icon} size={15} className="text-secondary-container" />
+                <p className="text-2xl font-extrabold text-primary-container">{value}</p>
+              </div>
+              <p className="text-xs font-semibold text-ink-muted">{label}</p>
+            </Card>
+          ))}
+        </div>
+
+        {/* Hoạt động gần đây */}
+        <Card className="p-5">
+          <h2 className="text-lg font-extrabold text-primary-container">Hoạt động gần đây</h2>
+          {profile.recentActivity.length ? (
+            <ul className="mt-4 space-y-3">
+              {profile.recentActivity.map((activity) => {
+                const link = (() => {
+                  const t = activity.target
+                  if (!t) return null
+                  if (t.commentId && t.submissionId && t.topicId) return `/topics/${t.topicId}/peer/${t.submissionId}`
+                  if (t.submissionId && t.topicId) return `/topics/${t.topicId}/peer/${t.submissionId}`
+                  if (t.topicId) return `/topics/${t.topicId}`
+                  return null
+                })()
+                return (
+                  <li key={activity._id} className="flex items-start gap-3 text-sm">
+                    <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-secondary-container" />
+                    <div className="min-w-0">
+                      {link ? (
+                        <Link to={link} className="font-semibold text-ink hover:text-secondary-container hover:underline">
+                          {activity.title}
+                        </Link>
+                      ) : (
+                        <span className="font-semibold text-ink">{activity.title}</span>
+                      )}
+                      <p className="mt-0.5 text-xs text-ink-subtle">{formatDateTime(activity.createdAt)}</p>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          ) : (
+            <p className="mt-4 text-sm text-ink-muted">Chưa có hoạt động nào được ghi lại.</p>
+          )}
+        </Card>
+      </div>
+
+      {/* Modal sửa thông tin */}
+      <Modal open={editOpen} title="Cập nhật thông tin" onClose={() => setEditOpen(false)}>
+        <div className="space-y-4 p-6">
+          <div>
+            <label className="block text-sm font-semibold text-ink">Tên hiển thị</label>
+            <input
+              type="text"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              className="mt-1.5 w-full rounded-md border border-border px-3 py-2 text-sm text-ink outline-none focus:border-secondary-container focus:ring-1 focus:ring-secondary-container"
+              placeholder="Nhập tên hiển thị..."
+              maxLength={50}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-ink">Giới thiệu bản thân</label>
+            <textarea
+              value={editBio}
+              onChange={(e) => setEditBio(e.target.value)}
+              rows={4}
+              className="mt-1.5 w-full rounded-md border border-border px-3 py-2 text-sm text-ink outline-none focus:border-secondary-container focus:ring-1 focus:ring-secondary-container"
+              placeholder="Viết vài dòng về bản thân..."
+              maxLength={200}
+            />
+            <p className="mt-1 text-right text-xs text-ink-subtle">{editBio.length}/200</p>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="ghost" onClick={() => setEditOpen(false)} disabled={editSaving}>Hủy</Button>
+            <Button onClick={saveProfile} disabled={!editName.trim() || editSaving}>
+              {editSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
@@ -1267,40 +1629,183 @@ export function BookmarkPage() {
     return '/bookmarks'
   }
 
-  function getBookmarkLabel(type: string): string {
-    if (type === 'subcomment') return 'Phản hồi đã lưu'
-    if (type === 'comment') return 'Bình luận đã lưu'
-    if (type === 'submission') return 'Bài nộp đã lưu'
-    return 'Chủ đề đã lưu'
-  }
-
   return (
     <div>
-      <PageHeader title="Bookmark / Đã lưu" description="Những nội dung hay được lưu lại từ khu vực dạy chéo." />
+      <PageHeader title="Đã lưu" description="Những nội dung hay được lưu lại từ khu vực dạy chéo." />
       <div className="mt-6 grid gap-4">
         {bookmarks.length ? (
           bookmarks.map((bookmark) => (
-            <Card key={bookmark._id} className="flex items-center justify-between gap-4 p-4">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-ink-muted">{getBookmarkLabel(bookmark.type)}</p>
-                <Link
-                  to={getBookmarkLink(bookmark)}
-                  className="mt-1 block text-sm font-bold text-secondary-container hover:underline truncate"
-                >
-                  Xem nội dung →
-                </Link>
-                <p className="mt-1 text-xs text-ink-subtle">{formatDateTime(bookmark.createdAt)}</p>
-              </div>
-              <Button size="sm" variant="secondary" onClick={() => removeBookmark(bookmark._id)}>
-                Bỏ lưu
-              </Button>
-            </Card>
+            <BookmarkCard
+              key={bookmark._id}
+              bookmark={bookmark}
+              linkTo={getBookmarkLink(bookmark)}
+              onRemove={() => removeBookmark(bookmark._id)}
+            />
           ))
         ) : (
           <EmptyState title="Chưa có nội dung đã lưu" description="Khi thấy bài hay trong dạy chéo, hãy lưu lại để xem sau." />
         )}
       </div>
     </div>
+  )
+}
+
+function BookmarkCard({ bookmark, linkTo, onRemove }: { bookmark: BookmarkItem; linkTo: string; onRemove: () => void }) {
+  const { content } = bookmark
+  if (content?.type === 'topic') return <BookmarkTopicCard content={content} linkTo={linkTo} onRemove={onRemove} savedAt={bookmark.createdAt} />
+  if (content?.type === 'submission') return <BookmarkSubmissionCard content={content} linkTo={linkTo} onRemove={onRemove} savedAt={bookmark.createdAt} />
+  if (content?.type === 'comment' || content?.type === 'subcomment') return <BookmarkCommentCard content={content as BookmarkCommentContent} linkTo={linkTo} onRemove={onRemove} savedAt={bookmark.createdAt} />
+  // Fallback nếu backend chưa trả về content
+  return (
+    <Card className="flex items-center justify-between gap-4 p-4">
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-ink-muted">{bookmark.type === 'topic' ? 'Chủ đề đã lưu' : bookmark.type === 'submission' ? 'Bài nộp đã lưu' : 'Bình luận đã lưu'}</p>
+        <Link to={linkTo} className="mt-1 block text-sm font-bold text-secondary-container hover:underline">Xem nội dung →</Link>
+      </div>
+      <Button size="sm" variant="secondary" onClick={onRemove}>Bỏ lưu</Button>
+    </Card>
+  )
+}
+
+function BookmarkTopicCard({ content, linkTo, onRemove, savedAt }: { content: BookmarkTopicContent; linkTo: string; onRemove: () => void; savedAt: string }) {
+  const { topic } = content
+  const creator = topic.createdBy
+  const creatorName = creator && typeof creator === 'object' ? creator.displayName : 'Người học'
+  const creatorId = creator && typeof creator === 'object' ? (creator._id ?? undefined) : undefined
+  const rank = creator && typeof creator === 'object' ? (creator.rank ?? 0) : 0
+  const rankTier = getRankTier(rank)
+  const roleLabel = RANK_LABELS[rankTier] || 'Tập sự'
+  const roleTone = rankTier >= 9 ? 'warning' : rankTier >= 7 ? 'brand' : rankTier >= 5 ? 'success' : rankTier >= 3 ? 'info' : 'neutral'
+  const statusTone = topic.status === 'Đang mở' ? 'success' : topic.status === 'Đã hoàn thành' ? 'success' : 'neutral'
+
+  return (
+    <Card className="flex flex-col gap-4 p-5 transition hover:-translate-y-0.5 hover:shadow-card-hover">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge tone={statusTone}>{topic.status}</Badge>
+          <Badge tone="neutral" className="text-xs">Chủ đề đã lưu</Badge>
+        </div>
+        <span className="text-xs font-semibold text-ink-subtle shrink-0">{formatDateTime(savedAt)}</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <Avatar name={creatorName} userId={creatorId} size="sm" />
+        <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+          <span className="text-xs font-bold text-primary-container truncate">{creatorName}</span>
+          <Badge tone={roleTone} className="px-1.5 py-0.5 text-[10px]">{roleLabel}</Badge>
+        </div>
+      </div>
+      <div>
+        <h3 className="line-clamp-2 text-lg font-extrabold leading-snug text-primary-container">{topic.title}</h3>
+        <p className="mt-1.5 line-clamp-2 text-sm leading-6 text-ink-muted">{topic.description}</p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Badge tone="info">{topic.category}</Badge>
+        {topic.tags.slice(0, 2).map((tag) => (
+          <Badge key={tag} className="border border-border-subtle bg-white text-ink-muted">{tag}</Badge>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle pt-4">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm font-semibold text-ink-subtle">
+          <span className="inline-flex items-center gap-1.5"><Icon name="file" size={14} />{topic.submissionCount} bài nộp</span>
+          <span className="inline-flex items-center gap-1.5"><Icon name="heart" size={14} />{topic.likeCount} thích</span>
+          <span className="inline-flex items-center gap-1.5"><Icon name="users" size={14} />{topic.participationCount} tham gia</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="secondary" onClick={onRemove}>Bỏ lưu</Button>
+          <Link to={linkTo} className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-sm font-bold text-white transition hover:opacity-90">Xem →</Link>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function BookmarkSubmissionCard({ content, linkTo, onRemove, savedAt }: { content: BookmarkSubmissionContent; linkTo: string; onRemove: () => void; savedAt: string }) {
+  const { submission, topicTitle, topicId } = content
+  const displayName = submission.isAnonymous ? 'Người học ẩn danh' : (submission.user?.displayName ?? 'Người học')
+  const userId = submission.isAnonymous ? undefined : submission.user?.id
+  const rank = submission.user?.rank ?? 0
+  const rankTier = getRankTier(rank)
+  const roleLabel = RANK_LABELS[rankTier]
+  const roleTone = rankTier >= 9 ? 'warning' : rankTier >= 7 ? 'brand' : rankTier >= 5 ? 'success' : rankTier >= 3 ? 'info' : 'neutral'
+
+  return (
+    <Card className="flex flex-col gap-4 p-5 transition hover:-translate-y-0.5 hover:shadow-card-hover">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge tone="neutral" className="text-xs">Bài nộp đã lưu</Badge>
+          <Link to={`/topics/${topicId}`} className="text-xs font-semibold text-secondary-container hover:underline truncate max-w-[200px]">{topicTitle}</Link>
+        </div>
+        <span className="text-xs font-semibold text-ink-subtle shrink-0">{formatDateTime(savedAt)}</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <Avatar name={displayName} userId={userId} anonymous={submission.isAnonymous} size="sm" />
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-primary-container truncate">{displayName}</p>
+          {!submission.isAnonymous && <Badge tone={roleTone} className="mt-0.5 px-1.5 py-0.5 text-[10px]">{roleLabel}</Badge>}
+        </div>
+      </div>
+      <div className="grid gap-3 text-sm text-ink-muted">
+        <div className="rounded-md bg-surface-low p-3">
+          <p className="mb-1 text-xs font-extrabold text-emerald-dark">Đã hiểu</p>
+          <p className="line-clamp-3">{submission.understood}</p>
+        </div>
+        <div className="rounded-md bg-surface-low p-3">
+          <p className="mb-1 text-xs font-extrabold text-emerald-dark">Chưa hiểu</p>
+          <p className="line-clamp-3">{submission.notUnderstood}</p>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle pt-4">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm font-semibold text-ink-subtle">
+          <span className="inline-flex items-center gap-1.5"><Icon name="heart" size={14} />{submission.likeCount} thích</span>
+          <span className="inline-flex items-center gap-1.5"><Icon name="message" size={14} />{submission.commentCount} bình luận</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="secondary" onClick={onRemove}>Bỏ lưu</Button>
+          <Link to={linkTo} className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-sm font-bold text-white transition hover:opacity-90">Xem →</Link>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function BookmarkCommentCard({ content, linkTo, onRemove, savedAt }: { content: BookmarkCommentContent; linkTo: string; onRemove: () => void; savedAt: string }) {
+  const { comment, topicTitle, topicId } = content
+  const displayName = comment.isAnonymous ? 'Người học ẩn danh' : (comment.user?.displayName ?? 'Người học')
+  const userId = comment.isAnonymous ? undefined : comment.user?.id
+  const rank = comment.user?.rank ?? 0
+  const rankTier = getRankTier(rank)
+  const roleLabel = RANK_LABELS[rankTier]
+  const roleTone = rankTier >= 9 ? 'warning' : rankTier >= 7 ? 'brand' : rankTier >= 5 ? 'success' : rankTier >= 3 ? 'info' : 'neutral'
+  const typeLabel = content.type === 'subcomment' ? 'Phản hồi đã lưu' : 'Bình luận đã lưu'
+
+  return (
+    <Card className="flex flex-col gap-4 p-5 transition hover:-translate-y-0.5 hover:shadow-card-hover">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge tone="neutral" className="text-xs">{typeLabel}</Badge>
+          <Link to={`/topics/${topicId}`} className="text-xs font-semibold text-secondary-container hover:underline truncate max-w-[200px]">{topicTitle}</Link>
+        </div>
+        <span className="text-xs font-semibold text-ink-subtle shrink-0">{formatDateTime(savedAt)}</span>
+      </div>
+      <div className="flex items-start gap-3">
+        <Avatar name={displayName} userId={userId} anonymous={comment.isAnonymous} size="sm" />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-bold text-ink">{displayName}</p>
+            {!comment.isAnonymous && <Badge tone={roleTone} className="px-1.5 py-0.5 text-[10px]">{roleLabel}</Badge>}
+            <span className="text-xs text-ink-subtle">{formatDateTime(comment.createdAt)}</span>
+          </div>
+          <p className="mt-2 line-clamp-4 text-sm leading-6 text-ink-muted">{comment.content}</p>
+          <div className="mt-2 flex items-center gap-2 text-sm font-semibold text-ink-subtle">
+            <span className="inline-flex items-center gap-1"><Icon name="heart" size={14} />{comment.likeCount}</span>
+          </div>
+        </div>
+      </div>
+      <div className="flex items-center justify-end gap-2 border-t border-border-subtle pt-4">
+        <Button size="sm" variant="secondary" onClick={onRemove}>Bỏ lưu</Button>
+        <Link to={linkTo} className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-sm font-bold text-white transition hover:opacity-90">Xem →</Link>
+      </div>
+    </Card>
   )
 }
 

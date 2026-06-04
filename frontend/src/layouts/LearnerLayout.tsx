@@ -74,7 +74,7 @@ export function LearnerLayout() {
               className="hidden h-10 items-center gap-2 rounded-md bg-white px-2.5 shadow-sm transition hover:bg-surface-low sm:flex"
               aria-label="Hồ sơ cá nhân"
             >
-              <Avatar name={user.displayName} size="sm" />
+              <Avatar name={user.displayName} userId={user.id} size="sm" />
             </Link>
             <button
               type="button"
@@ -137,7 +137,7 @@ export function LearnerLayout() {
           ))}
           <hr className="my-4 border-border-subtle" />
           <Link to="/profile" className="mt-auto flex items-center gap-3 rounded-md p-3 transition hover:bg-surface-low" onClick={() => setMobileMenuOpen(false)}>
-            <Avatar name={user.displayName} size="sm" />
+            <Avatar name={user.displayName} userId={user.id} size="sm" />
             <div className="min-w-0 flex-1 text-left">
               <p className="truncate text-sm font-bold text-ink">{user.displayName}</p>
               <p className="truncate text-xs font-semibold text-secondary-container">

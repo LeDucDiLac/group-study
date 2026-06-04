@@ -1,5 +1,5 @@
 import { apiRequest } from './api';
-import type { User, ProfileStats } from '@/types/domain';
+import type { User, ProfileStats, SelfProfile } from '@/types/domain';
 
 // In-memory cache dùng làm fallback khi dữ liệu chưa load xong
 const userCache = new Map<string, User>();
@@ -30,43 +30,47 @@ export const profileService = {
     return user;
   },
 
-  /** GET /api/profiles/:userId — lấy thống kê */
-  getProfileStats: async (userId: string): Promise<ProfileStats> => {
+  /** GET /api/profiles/self — lấy thông tin đầy đủ của người dùng hiện tại */
+  getSelfProfile: async (): Promise<SelfProfile> => {
+    const res = await apiRequest<{ profile: any }>('/api/profiles/self');
+    const p = res.profile;
+    const user = toUser(p);
+    userCache.set(user.id, user);
+    return {
+      ...user,
+      bio: p.bio || '',
+      summary: {
+        topicsParticipated: p.summary?.topicsParticipated || [],
+        topicsCreated: p.summary?.topicsCreated || [],
+        bookmarks: p.summary?.bookmarks || [],
+        likesReceived: p.summary?.likesReceived || 0,
+        liked: p.summary?.liked || [],
+        submissions: p.summary?.submissions || [],
+      },
+      recentActivity: p.recentActivity || [],
+    };
+  },
+
+  /** Lấy thống kê từ getSelfProfile (dùng /self để lấy đầy đủ) */
+  getProfileStats: async (): Promise<ProfileStats> => {
     try {
-      const res = await apiRequest<{ profile: any }>(`/api/profiles/${userId}`);
+      const res = await apiRequest<{ profile: any }>('/api/profiles/self');
       const summary = res.profile?.summary || {};
       return {
-        joinedTopicCount: summary.topicsParticipated || 0,
-        submissionCount: summary.submissions || 0,
-        createdTopicCount: summary.topicsCreated || 0,
-        bookmarkCount: summary.bookmarks?.length || 0,
+        joinedTopicCount: Array.isArray(summary.topicsParticipated) ? summary.topicsParticipated.length : (summary.topicsParticipated || 0),
+        submissionCount: Array.isArray(summary.submissions) ? summary.submissions.length : (summary.submissions || 0),
+        createdTopicCount: Array.isArray(summary.topicsCreated) ? summary.topicsCreated.length : (summary.topicsCreated || 0),
+        bookmarkCount: Array.isArray(summary.bookmarks) ? summary.bookmarks.length : 0,
         submissionLikeCount: summary.likesReceived || 0,
-        answerCount: summary.answerCount || 0,
-        answerLikeCount: summary.answerLikeCount || 0,
+        likedCount: Array.isArray(summary.liked) ? summary.liked.length : (summary.liked || 0),
       };
     } catch {
-      return {
-        joinedTopicCount: 0,
-        submissionCount: 0,
-        createdTopicCount: 0,
-        bookmarkCount: 0,
-        submissionLikeCount: 0,
-        answerCount: 0,
-        answerLikeCount: 0,
-      };
+      return { joinedTopicCount: 0, submissionCount: 0, createdTopicCount: 0, bookmarkCount: 0, submissionLikeCount: 0, likedCount: 0 };
     }
   },
 
-  /** GET /api/profiles/self */
-  getSelfProfile: async (): Promise<User> => {
-    const res = await apiRequest<{ profile: any }>('/api/profiles/self');
-    const user = toUser(res.profile);
-    userCache.set(user.id, user);
-    return user;
-  },
-
   /** PUT /api/profiles/:userId */
-  updateProfile: async (userId: string, payload: Partial<User>): Promise<User> => {
+  updateProfile: async (userId: string, payload: { displayName: string; bio: string }): Promise<User> => {
     const res = await apiRequest<{ profile: any }>(`/api/profiles/${userId}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
@@ -75,7 +79,7 @@ export const profileService = {
   },
 
   /** POST /api/profiles/:userId/avatar */
-  updateAvatar: async (userId: string, file: File): Promise<{ avatarUrl: string }> => {
+  updateAvatar: async (userId: string, file: File): Promise<void> => {
     const form = new FormData();
     form.append('avatar', file);
     const response = await fetch(`/api/profiles/${userId}/avatar`, {
@@ -87,6 +91,5 @@ export const profileService = {
       const err = await response.json().catch(() => ({}));
       throw new Error(err.error || 'Upload ảnh đại diện thất bại');
     }
-    return response.json();
   },
 };

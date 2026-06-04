@@ -17,6 +17,10 @@ const commentSchema = new Schema(
       ref: 'User',
       required: true,
     },
+    isAnonymous: {
+      type: Boolean,
+      default: false,
+    },
     content: {
       type: String,
       required: true,

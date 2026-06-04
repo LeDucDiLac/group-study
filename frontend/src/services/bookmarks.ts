@@ -9,12 +9,65 @@ export interface BookmarkTarget {
 
 export type BookmarkType = 'topic' | 'submission' | 'comment' | 'subcomment';
 
+// Content shapes returned by the enriched listBookmarks endpoint
+export interface BookmarkTopicContent {
+  type: 'topic';
+  topic: {
+    _id: string;
+    title: string;
+    description: string;
+    category: string;
+    tags: string[];
+    status: string;
+    likeCount: number;
+    dislikeCount: number;
+    submissionCount: number;
+    participationCount: number;
+    createdBy: { _id?: string; displayName: string; rank?: number } | null;
+  };
+}
+
+export interface BookmarkSubmissionContent {
+  type: 'submission';
+  topicTitle: string;
+  topicId: string;
+  submission: {
+    _id: string;
+    understood: string;
+    notUnderstood: string;
+    isAnonymous: boolean;
+    likeCount: number;
+    dislikeCount: number;
+    commentCount: number;
+    user: { id: string; displayName: string; rank: number } | null;
+  };
+}
+
+export interface BookmarkCommentContent {
+  type: 'comment' | 'subcomment';
+  topicTitle: string;
+  topicId: string;
+  submissionId: string;
+  commentId?: string;
+  comment: {
+    _id: string;
+    content: string;
+    isAnonymous: boolean;
+    likeCount: number;
+    user: { id: string; displayName: string; rank: number } | null;
+    createdAt: string;
+  };
+}
+
+export type BookmarkContent = BookmarkTopicContent | BookmarkSubmissionContent | BookmarkCommentContent;
+
 export interface BookmarkItem {
   _id: string;
   type: BookmarkType;
   target: BookmarkTarget;
   note?: string;
   createdAt: string;
+  content?: BookmarkContent;
 }
 
 export const bookmarkService = {

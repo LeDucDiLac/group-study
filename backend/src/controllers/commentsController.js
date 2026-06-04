@@ -7,7 +7,7 @@ export async function createComment(req, res) {
   if (!userId)
     return res.status(401).json({ error: 'Bạn cần đăng nhập để bình luận' })
 
-  const { topicId, submissionId, commentId, content } = req.body
+  const { topicId, submissionId, commentId, content, isAnonymous = false } = req.body
   
   if (!topicId || !submissionId || !content) {
     return res.status(400).json({ error: 'Thiếu thông tin bắt buộc' })
@@ -21,7 +21,7 @@ export async function createComment(req, res) {
     if (!submission) return res.status(404).json({ error: 'Bài nộp không tồn tại' })
     const parentComment = submission.comments.id(commentId)
     if (!parentComment) return res.status(404).json({ error: 'Bình luận không tồn tại' })
-    parentComment.subComments.push({ content, userId })
+    parentComment.subComments.push({ content, userId, isAnonymous })
     await topic.save()
     await addPointsForTopicComment({ topicOwnerId: topic.createdBy, actorId: userId })
     const newSubComment = parentComment.subComments[parentComment.subComments.length - 1]
@@ -33,7 +33,7 @@ export async function createComment(req, res) {
     if (!topic) return res.status(404).json({ error: 'Chủ đề không tồn tại' })
     const submission = topic.submissions.id(submissionId)
     if (!submission) return res.status(404).json({ error: 'Bài nộp không tồn tại' })
-    submission.comments.push({ content, userId })
+    submission.comments.push({ content, userId, isAnonymous })
     await topic.save()
     await addPointsForTopicComment({ topicOwnerId: topic.createdBy, actorId: userId })
     const newComment = submission.comments[submission.comments.length - 1]

@@ -3,7 +3,9 @@ import { ActionLink, Avatar, Badge, Card, Icon } from '@/components/ui'
 import type { Topic } from '@/types/domain'
 import { cn } from '@/utils/format'
 import { apiRequest } from '@/services/api'
+import { bookmarkService } from '@/services/bookmarks'
 import { getRankTier, RANK_LABELS } from '@/utils/badges'
+import { useAsync } from '@/utils/hooks'
 
 // Utility: determine text color based on topic status and window
 function timeTone(topic: Topic) {
@@ -77,6 +79,29 @@ export function TopicCard({ topic, publicMode = false }: { topic: Topic; publicM
   const [dislikeCount, setDislikeCount] = useState(topic.dislikeCount)
   const [pending, setPending] = useState(false)
 
+  // bookmark
+  const { data: bookmarks, setData: setBookmarks } = useAsync(() => bookmarkService.getBookmarks(), [])
+  const [bookmarkPending, setBookmarkPending] = useState(false)
+  const saved = bookmarkService.isBookmarked(bookmarks, topic._id)
+
+  async function handleToggleBookmark(e: React.MouseEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (publicMode || bookmarkPending) return
+    setBookmarkPending(true)
+    try {
+      const result = await bookmarkService.toggleBookmark(topic._id, bookmarks)
+      if (result.saved && result.item) {
+        setBookmarks((prev) => [...prev, result.item!])
+      } else {
+        const updated = await bookmarkService.getBookmarks()
+        setBookmarks(updated)
+      }
+    } finally {
+      setBookmarkPending(false)
+    }
+  }
+
   async function handleReact(action: 'like' | 'dislike') {
     if (publicMode || pending) return
     const isCancelling = (action === 'like' && reaction === 1) || (action === 'dislike' && reaction === -1)
@@ -130,16 +155,35 @@ export function TopicCard({ topic, publicMode = false }: { topic: Topic; publicM
         <div className="flex flex-wrap items-center gap-2">
           {expired ? <Badge tone="neutral">Đã hết hạn</Badge> : <TopicStatusBadge status={topic.status} />}
         </div>
-        {hasSubmitted ? (
-          <Badge tone="success" className="shrink-0">
-            <Icon name="check" size={13} />
-            Đã nộp bài
-          </Badge>
-        ) : (
-          <span className={cn('inline-flex items-center gap-1.5 text-xs font-bold whitespace-nowrap', timeTone(topic))}>
-            <Icon name="clock" size={13} />
-          </span>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          {!publicMode && (
+            <button
+              type="button"
+              onClick={handleToggleBookmark}
+              disabled={bookmarkPending}
+              aria-pressed={saved}
+              aria-label={saved ? 'Bỏ lưu chủ đề này' : 'Lưu chủ đề này'}
+              className={cn(
+                'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-bold transition',
+                'hover:bg-surface-low cursor-pointer disabled:cursor-not-allowed',
+                saved ? 'text-secondary-container' : 'text-ink-subtle hover:text-secondary-container',
+              )}
+            >
+              <Icon name={saved ? 'liked' : 'heart'} size={13} />
+              {saved ? 'Đã lưu' : 'Lưu'}
+            </button>
+          )}
+          {hasSubmitted ? (
+            <Badge tone="success" className="shrink-0">
+              <Icon name="check" size={13} />
+              Đã nộp bài
+            </Badge>
+          ) : (
+            <span className={cn('inline-flex items-center gap-1.5 text-xs font-bold whitespace-nowrap', timeTone(topic))}>
+              <Icon name="clock" size={13} />
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Publisher Info */}

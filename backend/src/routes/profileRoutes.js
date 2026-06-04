@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import authMiddleware from '../middleware/authMiddleware.js'
-import { getProfile, getSelfProfile, updateProfile, updateAvatar } from '../controllers/profileController.js'
+import { getProfile, updateProfile, updateAvatar } from '../controllers/profileController.js'
 import multer from 'multer'
 import fs from 'fs'
 import path from 'path'
@@ -19,8 +19,24 @@ const upload = multer({
     }
 })
 
-router.get('/:userId', getProfile)
-router.get('/self', authMiddleware, getSelfProfile)
+// Optional auth — populate req.user nếu có token, không bắt buộc
+async function optionalAuth(req, res, next) {
+  const authHeader = req.headers.authorization
+  const cookieToken = req.cookies?.['tb_token']
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : cookieToken
+  if (!token) return next()
+  try {
+    const jwt = (await import('jsonwebtoken')).default
+    const payload = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret')
+    if (payload.id) {
+      const User = (await import('../models/User.js')).default
+      req.user = await User.findById(payload.id)
+    }
+  } catch { /* token lỗi thì bỏ qua */ }
+  next()
+}
+
+router.get('/:userId', optionalAuth, getProfile)
 router.put('/:userId', authMiddleware, updateProfile)
 router.get('/:userId/avatar', async (req, res) => {
     const userId = String(req.params.userId)

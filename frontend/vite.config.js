@@ -14,10 +14,13 @@ export default defineConfig({
     proxy: {
       // Proxy API calls đến json-server
       '/api': {
-        target: 'https://dreadlock-tidiness-earring.ngrok-free.dev ',
+        target: 'https://dreadlock-tidiness-earring.ngrok-free.dev',
         changeOrigin: true,
       },
     },
-    allowedHosts: 
-  },
+    allowedHosts: [
+      'noninhabitable-suzann-woolstapling.ngrok-free.dev',
+      'dreadlock-tidiness-earring.ngrok-free.dev',
+    ]
+  }
 })

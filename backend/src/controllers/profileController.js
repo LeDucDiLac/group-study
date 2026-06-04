@@ -5,17 +5,46 @@ import fs from 'fs'
 import path from 'path'
 
 export async function getProfile(req, res) {
-    const { userId } = req.params
+    const paramId = req.params.userId
+
+    // Nếu là "self" thì dùng userId của người đang đăng nhập
+    const isSelf = paramId === 'self'
+
+    if (isSelf && !req.user) {
+        return res.status(401).json({ error: 'Bạn cần đăng nhập' })
+    }
+
+    const userId = isSelf ? String(req.user._id) : paramId
+
     const user = await User.findById(userId).select('-password')
     if (!user) return res.status(404).json({ error: 'Không tìm thấy người dùng' })
-    // Lấy thêm thông tin topic đã tham gia và đã tạo 
-    const [topicsParticipated, topicsCreated] = [(await ProfileService.fetchTopicsParticipated(userId)).length, (await ProfileService.fetchTopicsCreated(userId)).length]
-    
-    // Chuyển subbmissions và liked thành số lượng
+
+    if (isSelf) {
+        // Trả về đầy đủ: arrays + recentActivity
+        const { topicsParticipated, topicsCreated, bookmarks } = await ProfileService.getAggregatedSummary(userId)
+        const recentActivity = await getRecentActivities(userId)
+        return res.json({
+            profile: {
+                ...user.toObject(),
+                summary: {
+                    ...user.summary,
+                    topicsParticipated,
+                    topicsCreated,
+                    bookmarks,
+                },
+                recentActivity,
+            }
+        })
+    }
+
+    // Public profile — trả về counts
+    const [topicsParticipated, topicsCreated] = [
+        (await ProfileService.fetchTopicsParticipated(userId)).length,
+        (await ProfileService.fetchTopicsCreated(userId)).length,
+    ]
     const submissionsCount = Array.isArray(user.summary?.submissions) ? user.summary.submissions.length : 0
     const likedCount = Array.isArray(user.summary?.liked) ? user.summary.liked.length : 0
 
-    // Tạo summary mới với thông tin đã chuyển đổi
     const summary = {
         topicsParticipated,
         topicsCreated,
@@ -24,22 +53,7 @@ export async function getProfile(req, res) {
         liked: likedCount,
     }
 
-    // Trả về profile với summary đã chuyển đổi
-    res.json({ profile: { ...user.toObject(), summary } })
-}
-
-export async function getSelfProfile(req, res) {
-    const userId = String(req.user._id)
-    const user = await User.findById(userId).select('-password')
-    if (!user) return res.status(404).json({ error: 'Không tìm thấy người dùng' })
-    // Lấy thêm thông tin topic đã tham gia và đã tạo và bookmarks
-    const topicsParticipated = await ProfileService.fetchTopicsParticipated(userId)
-    const topicsCreated = await ProfileService.fetchTopicsCreated(userId)
-    const bookmarks = await ProfileService.fetchBookmarks(userId)
-
-    // Lấy thông tin hoạt động gần đây
-    const recentActivity = await getRecentActivities(userId)
-    res.json({ profile: { ...user.toObject(), summary: { ...user.summary, topicsParticipated, topicsCreated, bookmarks }, recentActivity } })
+    return res.json({ profile: { ...user.toObject(), summary } })
 }
 
 export async function updateProfile(req, res) {
