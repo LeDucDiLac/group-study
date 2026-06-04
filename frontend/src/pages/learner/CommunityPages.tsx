@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { BadgeProgressCard, ContributionBadge } from '@/components/badge/ContributionBadge'
 import { SubmissionCard } from '@/components/submission/SubmissionCard'
+import { UserLink } from '@/components/user/UserLink'
 import { ActionLink, Avatar, Badge, Button, Card, EmptyState, Icon, Modal, PageHeader, Select, Textarea } from '@/components/ui'
 import {
   authService,
@@ -289,12 +290,13 @@ function PeerSubmissionCard({ submission, author, to, saved = false, onToggleBoo
     <Card className="group p-5 transition hover:border-secondary-fixed-dim hover:shadow-card-hover">
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
-          <Avatar name={displayName} anonymous={submission.isAnonymous} userId={author.id} />
-          <div className="min-w-0">
-            <p className="truncate font-extrabold text-primary-container">{displayName}</p>
-            <div className="mt-1 flex flex-wrap gap-2">
-              <Badge tone={roleTone}>{roleLabel}</Badge>
-            </div>
+          <UserLink
+            userId={submission.isAnonymous ? undefined : author.id}
+            displayName={displayName}
+            anonymous={submission.isAnonymous}
+          />
+          <div className="mt-1 flex flex-wrap gap-2">
+            <Badge tone={roleTone}>{roleLabel}</Badge>
           </div>
         </div>
       </div>
@@ -463,11 +465,12 @@ export function PeerDetailPage() {
         <Card className="p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex items-center gap-3">
-              <Avatar name={author.displayName} anonymous={submission.isAnonymous} userId={author.id} />
-              <div>
-                <p className="font-extrabold text-primary-container">{submission.isAnonymous ? 'Người học ẩn danh' : author.displayName}</p>
-                <ContributionBadge rank={author.rank} compact anonymous={submission.isAnonymous} />
-              </div>
+              <UserLink
+                userId={submission.isAnonymous ? undefined : author.id}
+                displayName={submission.isAnonymous ? 'Người học ẩn danh' : author.displayName}
+                anonymous={submission.isAnonymous}
+              />
+              <ContributionBadge rank={author.rank} compact anonymous={submission.isAnonymous} />
             </div>
             <Button
               variant={saved ? 'secondary' : 'primary'}
@@ -805,10 +808,14 @@ function CommentItem({
     <article className={depth ? 'ml-5 border-l border-border-subtle pl-4 md:ml-8' : ''}>
       <div className="rounded-md border border-border-subtle bg-white p-4">
         <div className="flex items-start gap-3">
-          <Avatar name={displayName} size="sm" userId={comment.isAnonymous ? undefined : comment.author.id} anonymous={comment.isAnonymous} />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="font-bold text-ink">{displayName}</p>
+              <UserLink
+                userId={comment.isAnonymous ? undefined : comment.author.id}
+                displayName={displayName}
+                anonymous={comment.isAnonymous}
+                size="sm"
+              />
               {!comment.isAnonymous && <ContributionBadge rank={comment.author.rank} compact />}
               <span className="text-xs font-semibold text-ink-subtle">{formatDateTime(comment.createdAt)}</span>
             </div>

@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { Avatar, Badge, Card, Icon } from '@/components/ui'
 import { ContributionBadge } from '@/components/badge/ContributionBadge'
+import { UserLink } from '@/components/user/UserLink'
 import type { Submission, User } from '@/types/domain'
 import { minutesToReadable } from '@/utils/format'
 
@@ -21,9 +22,12 @@ export function SubmissionCard({
     <Card className="p-5">
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Avatar name={author.displayName} anonymous={submission.isAnonymous} userId={author.id} />
+          <UserLink
+            userId={submission.isAnonymous ? undefined : author.id}
+            displayName={submission.isAnonymous ? 'Người học ẩn danh' : author.displayName}
+            anonymous={submission.isAnonymous}
+          />
           <div>
-            <p className="font-bold text-primary-container">{submission.isAnonymous ? 'Người học ẩn danh' : author.displayName}</p>
             <div className="mt-1">
               <ContributionBadge rank={author.rank} compact anonymous={submission.isAnonymous} />
             </div>

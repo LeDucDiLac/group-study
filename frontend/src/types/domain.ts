@@ -44,6 +44,17 @@ export interface SelfProfile extends User {
   recentActivity: RecentActivity[]
 }
 
+export interface PublicProfile extends User {
+  bio?: string
+  summary: {
+    topicsParticipated: number
+    topicsCreated: number
+    submissions: number
+    likesReceived: number
+    liked: number
+  }
+}
+
 export interface ResourceFile {
   label: string;
   type: 'link' | 'file' | 'pdf' | 'image' | 'markdown' | 'txt' | 'docx';

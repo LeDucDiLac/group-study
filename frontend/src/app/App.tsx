@@ -9,6 +9,7 @@ import { BookmarkPage, CalendarPage, CommunityInsightPage, NotificationsPage, Pe
 import { LearnPage } from '@/pages/learner/LearnPages'
 import { CreateTopicPage, MyTopicsPage, TopicDetailPage, TopicPendingPage, TopicsPage } from '@/pages/learner/TopicPages'
 import { ForgotPasswordPage, LandingPage, LoginPage, PublicTopicsPage } from '@/pages/public/PublicPages'
+import { PublicProfilePage } from '@/pages/learner/PublicProfilePage'
 import { authService } from '@/services/api'
 import type { User } from '@/types/domain'
 import { AvatarCacheProvider } from '@/contexts/AvatarCacheContext'
@@ -35,6 +36,7 @@ export function App() {
         <Route path="/topics/:id/peer" element={<PeerLearningPage />} />
         <Route path="/topics/:id/peer/:submissionId" element={<PeerDetailPage />} />
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/profile/:userId" element={<PublicProfilePage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/bookmarks" element={<BookmarkPage />} />

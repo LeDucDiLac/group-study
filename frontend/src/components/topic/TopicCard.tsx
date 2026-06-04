@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { ActionLink, Avatar, Badge, Card, Icon } from '@/components/ui'
+import { UserLink } from '@/components/user/UserLink'
 import type { Topic } from '@/types/domain'
 import { cn } from '@/utils/format'
 import { apiRequest } from '@/services/api'
@@ -188,11 +190,12 @@ export function TopicCard({ topic, publicMode = false }: { topic: Topic; publicM
 
       {/* Publisher Info */}
       <div className="mt-3.5 flex items-center gap-2">
-        <Avatar name={creatorName} userId={creatorId} size="sm" />
-        <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-          <span className="text-xs font-bold text-primary-container truncate">{creatorName}</span>
-          <Badge tone={roleTone} className="px-1.5 py-0.5 text-[10px]">{roleLabel}</Badge>
-        </div>
+        <UserLink
+          userId={creatorId}
+          displayName={creatorName}
+          size="sm"
+        />
+        <Badge tone={roleTone} className="px-1.5 py-0.5 text-[10px]">{roleLabel}</Badge>
       </div>
 
       <h3 className="mt-3 line-clamp-2 min-h-[54px] text-[20px] font-extrabold leading-snug text-primary-container">

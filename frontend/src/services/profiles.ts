@@ -1,5 +1,5 @@
 import { apiRequest } from './api';
-import type { User, ProfileStats, SelfProfile } from '@/types/domain';
+import type { User, ProfileStats, SelfProfile, PublicProfile } from '@/types/domain';
 
 // In-memory cache dùng làm fallback khi dữ liệu chưa load xong
 const userCache = new Map<string, User>();
@@ -28,6 +28,26 @@ export const profileService = {
     const user = toUser(res.profile);
     userCache.set(user.id, user);
     return user;
+  },
+
+  /** GET /api/profiles/:userId — lấy public profile đầy đủ (counts + bio) */
+  getPublicProfile: async (userId: string): Promise<PublicProfile> => {
+    const res = await apiRequest<{ profile: any }>(`/api/profiles/${userId}`);
+    const p = res.profile;
+    const user = toUser(p);
+    userCache.set(user.id, user);
+    const summary = p.summary || {};
+    return {
+      ...user,
+      bio: p.bio || '',
+      summary: {
+        topicsParticipated: Number(summary.topicsParticipated || 0),
+        topicsCreated: Number(summary.topicsCreated || 0),
+        submissions: Number(summary.submissions || 0),
+        likesReceived: Number(summary.likesReceived || 0),
+        liked: Number(summary.liked || 0),
+      },
+    };
   },
 
   /** GET /api/profiles/self — lấy thông tin đầy đủ của người dùng hiện tại */

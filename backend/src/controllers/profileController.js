@@ -1,5 +1,5 @@
 import User from '../models/User.js'
-import ProfileService from '../services/profileService.js'
+import ProfileService, {fetchTopicsParticipated, fetchTopicsCreated} from '../services/profileService.js'
 import { getRecentActivities } from '../services/recentActivityService.js'
 import fs from 'fs'
 import path from 'path'
@@ -39,8 +39,8 @@ export async function getProfile(req, res) {
 
     // Public profile — trả về counts
     const [topicsParticipated, topicsCreated] = [
-        (await ProfileService.fetchTopicsParticipated(userId)).length,
-        (await ProfileService.fetchTopicsCreated(userId)).length,
+        (await fetchTopicsParticipated(userId)).length,
+        (await fetchTopicsCreated(userId)).length,
     ]
     const submissionsCount = Array.isArray(user.summary?.submissions) ? user.summary.submissions.length : 0
     const likedCount = Array.isArray(user.summary?.liked) ? user.summary.liked.length : 0
