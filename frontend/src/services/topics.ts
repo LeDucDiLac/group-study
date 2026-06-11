@@ -1,5 +1,5 @@
 import { apiRequest } from './api';
-import type { Topic, TopicFilters } from '@/types/domain';
+import type { Topic, TopicFilters, TopicListResponse } from '@/types/domain';
 
 // In-memory cache dùng làm fallback khi dữ liệu chưa load xong
 const topicCache = new Map<string, Topic>();
@@ -28,14 +28,46 @@ export const topicFallback = (id: string): Topic =>
   } as Topic);
 
 export const topicService = {
-  /** GET /api/topics */
-  getTopics: async (filters: TopicFilters = {}): Promise<Topic[]> => {
+  /** GET /api/topics with pagination metadata */
+  getTopicsPaginated: async (filters: TopicFilters = {}): Promise<TopicListResponse> => {
     const params = new URLSearchParams();
     if (filters.category && filters.category !== 'all') params.append('category', filters.category);
     if (filters.query?.trim()) params.append('query', filters.query.trim());
-    const topics = await apiRequest<Topic[]>(`/api/topics?${params.toString()}`);
-    topics.forEach(t => topicCache.set(t._id, t));
-    return topics;
+    if (filters.status && filters.status !== 'all') params.append('status', filters.status);
+    if (typeof filters.page === 'number' && filters.page > 0) params.append('page', String(filters.page));
+    if (typeof filters.limit === 'number' && filters.limit > 0) params.append('limit', String(filters.limit));
+
+    const response = await apiRequest<TopicListResponse | Topic[]>(`/api/topics?${params.toString()}`);
+    if (Array.isArray(response)) {
+      response.forEach((t) => topicCache.set(t._id, t));
+      return {
+        items: response,
+        pagination: {
+          page: filters.page ?? 1,
+          limit: filters.limit ?? Math.max(response.length, 1),
+          totalItems: response.length,
+          totalPages: 1,
+        },
+      };
+    }
+
+    const items = Array.isArray(response.items) ? response.items : [];
+    items.forEach((t) => topicCache.set(t._id, t));
+    return {
+      items,
+      pagination: {
+        page: response.pagination?.page ?? (filters.page ?? 1),
+        limit: response.pagination?.limit ?? (filters.limit ?? 10),
+        totalItems: response.pagination?.totalItems ?? items.length,
+        totalPages: response.pagination?.totalPages ?? 1,
+      },
+    };
+  },
+
+  /** GET /api/topics */
+  getTopics: async (filters: TopicFilters = {}): Promise<Topic[]> => {
+    const result = await topicService.getTopicsPaginated(filters);
+    return result.items;
   },
 
   /** GET /api/topics/:id */

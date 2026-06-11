@@ -270,13 +270,9 @@ topicSchema.statics.findTargetById = async function findTargetById(id) {
 const Topic = mongoose.models.Topic || mongoose.model('Topic', topicSchema)
 
 export function listTopics(filter = {}, options = {}) {
-  // Chỉ trả về chủ đề Đang mở hoặc Đã hoàn thành
   const { page = 1, limit = 10 } = options
   if (page && limit) {
     return Topic.find(filter)
-      .find({
-        $or: [{ status: 'Đang mở' }, { status: 'Đã hoàn thành' }]
-      })
       .select('-proposalReason -rejectionReason, -approvedBy -approvedAt')
       .populate('createdBy', 'displayName rank')
       .sort({ createdAt: -1 })

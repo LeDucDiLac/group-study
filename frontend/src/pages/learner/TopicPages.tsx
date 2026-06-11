@@ -15,43 +15,36 @@ import {
 } from '@/components/ui'
 import { ResourceList, TopicCard, TopicStatusBadge } from '@/components/topic/TopicCard'
 import { authService, topicFallback, topicService, uploadService } from '@/services/api'
-import type { Topic, TopicStatus, ResourceFile } from '@/types/domain'
+import type { Topic, TopicStatus, ResourceFile, TopicListResponse } from '@/types/domain'
 import { cn, formatDate } from '@/utils/format'
 import { useAsync } from '@/utils/hooks'
 
 export function TopicsPage() {
+  const PAGE_SIZE = 12
+  const TOPICS_FALLBACK: TopicListResponse = {
+    items: [],
+    pagination: { page: 1, limit: PAGE_SIZE, totalItems: 0, totalPages: 1 },
+  }
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('all')
   const [status, setStatus] = useState<TopicStatus | 'all'>('all')
   const [sort, setSort] = useState('newest')
-  const { data: allTopics, loading } = useAsync(() => topicService.getTopics(), [])
-
-  const stats = useMemo(
-    () => ({
-      total: allTopics.length,
-      submissions: allTopics.reduce((sum, topic) => sum + topic.submissionCount, 0),
-      likes: allTopics.reduce((sum, topic) => sum + topic.likeCount, 0),
-      pending: allTopics.filter((topic) => topic.status === 'Chưa duyệt').length,
-    }),
-    [allTopics],
+  const [page, setPage] = useState(1)
+  const { data: topicsResult, loading } = useAsync(
+    () => topicService.getTopicsPaginated({ page, limit: PAGE_SIZE, query, category, status }),
+    TOPICS_FALLBACK,
+    [page, query, category, status],
   )
+  const allTopics = topicsResult.items
+  const totalPages = Math.max(1, topicsResult.pagination.totalPages || 1)
 
   const topics = useMemo(() => {
-    const q = query.toLowerCase().trim()
-    const filtered = allTopics.filter((topic) => {
-      const matchQuery =
-        !q || [topic.title, topic.description, topic.category, ...topic.tags].join(' ').toLowerCase().includes(q)
-      const matchCategory = category === 'all' || topic.category === category
-      const matchStatus = status === 'all' || topic.status === status
-      return matchQuery && matchCategory && matchStatus
-    })
-
-    return [...filtered].sort((a, b) => {
+    return [...allTopics].sort((a, b) => {
       if (sort === 'popular') return b.likeCount - a.likeCount
       if (sort === 'deadline') return a.windowHours - b.windowHours
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     })
-  }, [allTopics, category, query, sort, status])
+  }, [allTopics, sort])
 
   const hasActiveFilter = Boolean(query.trim()) || category !== 'all' || status !== 'all' || sort !== 'newest'
 
@@ -60,28 +53,32 @@ export function TopicsPage() {
     setCategory('all')
     setStatus('all')
     setSort('newest')
+    setPage(1)
   }
+
+  useEffect(() => {
+    setPage(1)
+  }, [query, category, status])
+
+  useEffect(() => {
+    if (!loading && page > totalPages) {
+      setPage(totalPages)
+    }
+  }, [loading, page, totalPages])
+
+  const canGoPrevious = page > 1
+  const canGoNext = page < totalPages
 
   return (
     <div className="space-y-5">
       <div className="rounded-md border border-border-subtle bg-white px-5 py-5 shadow-card">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <Badge tone="brand">Chủ đề học tập</Badge>
-            <h1 className="mt-3 text-[30px] font-extrabold leading-tight text-primary-container sm:text-[34px]">
-              Danh sách chủ đề học tập
-            </h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-muted sm:text-base">
-              Tìm chủ đề vừa đủ nhỏ, tự học trong thời gian giới hạn và mở khóa dạy chéo sau khi nộp bài.
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:min-w-[520px]">
-            <CompactStat label="Chủ đề" value={stats.total} />
-            <CompactStat label="Bài nộp" value={stats.submissions} />
-            <CompactStat label="Lượt thích" value={stats.likes} />
-            <CompactStat label="Chưa duyệt" value={stats.pending} />
-          </div>
-        </div>
+        <Badge tone="brand">Chủ đề học tập</Badge>
+        <h1 className="mt-3 text-[30px] font-extrabold leading-tight text-primary-container sm:text-[34px]">
+          Danh sách chủ đề học tập
+        </h1>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-muted sm:text-base">
+          Tìm chủ đề vừa đủ nhỏ, tự học trong thời gian giới hạn và mở khóa dạy chéo sau khi nộp bài.
+        </p>
       </div>
 
       <Card className="p-4">
@@ -98,10 +95,14 @@ export function TopicsPage() {
           </label>
           <Select aria-label="Danh mục" value={category} onChange={(event) => setCategory(event.target.value)}>
             <option value="all">Tất cả danh mục</option>
-            <option value="Toán học">Toán học</option>
-            <option value="Lập trình">Lập trình</option>
-            <option value="Marketing">Marketing</option>
+            <option value="Toán và Khoa học cơ bản">Toán và Khoa học cơ bản</option>
+            <option value="Công nghệ thông tin">Công nghệ thông tin</option>
+            <option value="Tiếng Nhật">Tiếng Nhật</option>
+            <option value="Kiến thức bổ trợ">Kiến thức bổ trợ</option>
+            <option value="AI và Big Data">AI và Big Data</option>
+            <option value="AI và IoT">AI và IoT</option>
             <option value="Kỹ năng học tập">Kỹ năng học tập</option>
+            <option value="Khác">Khác</option>
           </Select>
           <Select aria-label="Sắp xếp" value={sort} onChange={(event) => setSort(event.target.value)}>
             <option value="newest">Mới nhất</option>
@@ -136,15 +137,22 @@ export function TopicsPage() {
           to="/topics/new"
         />
       )}
-    </div>
-  )
-}
 
-function CompactStat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-md border border-border-subtle bg-surface-low px-4 py-3">
-      <p className="text-xl font-extrabold leading-none text-primary-container">{value}</p>
-      <p className="mt-1 text-xs font-semibold text-ink-subtle">{label}</p>
+      {!loading && (canGoPrevious || canGoNext) && (
+        <Card className="p-4">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-ink-muted">Trang {page}/{totalPages}</p>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={!canGoPrevious}>
+                Trang trước
+              </Button>
+              <Button variant="ghost" onClick={() => setPage((current) => current + 1)} disabled={!canGoNext}>
+                Trang sau
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
     </div>
   )
 }
@@ -175,6 +183,9 @@ export function TopicDetailPage() {
   const { data: currentUser } = useAsync(() => authService.getSessionUser(), null)
   const [participating, setParticipating] = useState(false)
   const mySubmission = topic.mySubmission
+  const userRank = currentUser?.rank ?? 0
+  const canPeekUnlimited = userRank >= 500
+  const canPeekDaily = userRank >= 300 && userRank < 500
 
   // Kiểm tra user có phải chủ topic không
   const creatorId = typeof topic.createdBy === 'object' ? topic.createdBy._id : topic.createdBy
@@ -212,6 +223,11 @@ export function TopicDetailPage() {
         windowHours: topic.windowHours,
       },
     })
+  }
+
+  function handlePeekSubmissions() {
+    if (disabled) return
+    navigate(`/topics/${id}/peer?peek=1`)
   }
 
   if (topic.status === 'Chưa duyệt')
@@ -281,19 +297,37 @@ export function TopicDetailPage() {
                 <ActionLink to={`/topics/${topic._id}/peer`}>Vào dạy chéo</ActionLink>
               </>
             ) : (
-              <Button
-                variant={disabled ? 'secondary' : 'primary'}
-                disabled={disabled || participating}
-                onClick={handleStartLearning}
-                className="w-full"
-              >
-                {participating ? 'Đang xử lý...' : disabled ? 'Chưa thể học' : 'Bắt đầu học'}
-              </Button>
+              <>
+                <Button
+                  variant={disabled ? 'secondary' : 'primary'}
+                  disabled={disabled || participating}
+                  onClick={handleStartLearning}
+                  className="w-full"
+                >
+                  {participating ? 'Đang xử lý...' : disabled ? 'Chưa thể học' : 'Bắt đầu học'}
+                </Button>
+                {(canPeekUnlimited || canPeekDaily) && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      disabled={disabled}
+                      onClick={handlePeekSubmissions}
+                      className="w-full"
+                    >
+                      Xem trộm 
+                    </Button>
+                    <p className="text-xs font-medium text-ink-subtle">
+                      {canPeekUnlimited
+                        ? 'Rank Học giả trở lên: có thể xem trộm bài cộng đồng không giới hạn mà không cần nộp bài trước.'
+                        : 'Rank Sinh viên kỳ cựu: được xem trộm 1 lần mỗi ngày trước khi nộp bài.'}
+                    </p>
+                  </>
+                )}
+              </>
             )}
           </div>
         </Card>
         <Card className="p-5">
-          <p className="text-sm font-bold text-ink">Thông tin đề xuất</p>
           <p className="text-sm text-ink-muted">Ngày tạo: {formatDate(topic.createdAt)}</p>
         </Card>
       </aside>
@@ -582,7 +616,7 @@ export function CreateTopicPage() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [title, setTitle] = useState(editingTopic?.title ?? '')
   const [description, setDescription] = useState(editingTopic?.description ?? '')
-  const [category, setCategory] = useState(editingTopic?.category ?? 'Lập trình')
+  const [category, setCategory] = useState(editingTopic?.category ?? 'Khác')
   const [durationHours, setDurationHours] = useState(editingTopic ? String(editingTopic.windowHours) : '')
   const [tags, setTags] = useState(editingTopic?.tags ?? [])
   const [tagDraft, setTagDraft] = useState('')
@@ -595,7 +629,7 @@ export function CreateTopicPage() {
     if (!editingTopic) return
     setTitle(editingTopic.title)
     setDescription(editingTopic.description)
-    setCategory(editingTopic.category || 'Lập trình')
+    setCategory(editingTopic.category || 'Khác')
     setDurationHours(String(editingTopic.windowHours || 48))
     setTags(editingTopic.tags ?? [])
     setLinkLabel('')
@@ -705,14 +739,25 @@ export function CreateTopicPage() {
 
   const handleFiles = async (files: FileList | null) => {
     if (!files?.length) return
-    const allowed = ['pdf', 'docx', 'md', 'txt', 'png', 'jpg', 'jpeg', 'webp']
+    const allowed = [
+      'pdf', 'doc', 'docx', 'rtf', 'odt',
+      'xls', 'xlsx', 'xlsm', 'ods', 'csv', 'tsv',
+      'ppt', 'pptx', 'pptm', 'odp',
+      'md', 'markdown', 'txt', 'json', 'xml', 'yaml', 'yml',
+      'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'tif', 'tiff', 'svg', 'heic', 'heif', 'avif',
+      'zip', 'rar', '7z', 'tar', 'gz', 'bz2',
+      'mp3', 'wav', 'm4a', 'mp4', 'mov', 'avi', 'mkv', 'webm',
+    ]
     const picked = Array.from(files)
     const invalid = picked.find((file) => {
       const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
       return !allowed.includes(ext) || file.size > 20 * 1024 * 1024
     })
     if (invalid) {
-      setErrors((current) => ({ ...current, resources: 'File cần thuộc PDF, PNG, JPG, WebP, DOCX, MD, TXT và tối đa 20MB.' }))
+      setErrors((current) => ({
+        ...current,
+        resources: 'File cần thuộc nhóm tài liệu phổ biến (ảnh, PDF, Word/Excel/PPT, text, nén, media) và tối đa 20MB.',
+      }))
       return
     }
     setErrors((current) => ({ ...current, resources: '' }))
@@ -781,9 +826,14 @@ export function CreateTopicPage() {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <Select label="Danh mục" value={category} onChange={(event) => setCategory(event.target.value)}>
                 <option>Lập trình</option>
-                <option>Toán học</option>
-                <option>Marketing</option>
+                <option>Toán và Khoa học cơ bản</option>
+                <option>Công nghệ thông tin</option>
+                <option>Tiếng Nhật</option>
+                <option>Kiến thức bổ trợ</option>
+                <option>AI và Big Data</option>
+                <option>AI và IoT</option>
                 <option>Kỹ năng học tập</option>
+                <option>Khác</option>
               </Select>
               <label className="grid gap-1.5 text-sm font-semibold text-ink">
                 Thời lượng học
@@ -883,7 +933,7 @@ export function CreateTopicPage() {
                     type="file"
                     multiple
                     className="sr-only"
-                    accept=".pdf,.docx,.md,.txt,.png,.jpg,.jpeg,.webp"
+                    accept=".pdf,.doc,.docx,.rtf,.odt,.xls,.xlsx,.xlsm,.ods,.csv,.tsv,.ppt,.pptx,.pptm,.odp,.md,.markdown,.txt,.json,.xml,.yaml,.yml,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff,.svg,.heic,.heif,.avif,.zip,.rar,.7z,.tar,.gz,.bz2,.mp3,.wav,.m4a,.mp4,.mov,.avi,.mkv,.webm"
                     onChange={(event) => handleFiles(event.target.files)}
                   />
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white text-secondary-container shadow-card">
@@ -891,7 +941,7 @@ export function CreateTopicPage() {
                   </span>
                   <span className="text-left">
                     <span className="block text-sm font-bold text-ink">Kéo thả file hoặc bấm để tải lên</span>
-                    <span className="mt-0.5 block text-xs font-medium text-ink-subtle">PDF, PNG, JPG, WebP, DOCX, TXT, MD · tối đa 20MB.</span>
+                    <span className="mt-0.5 block text-xs font-medium text-ink-subtle">Ảnh, PDF, Word/Excel/PPT, text, file nén, audio/video · tối đa 20MB.</span>
                   </span>
                 </label>
               </div>

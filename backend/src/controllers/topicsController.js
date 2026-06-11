@@ -4,8 +4,46 @@ import Topic, { listTopics } from '../models/Topic.js'
 import { createSystemNotification } from '../services/notificationService.js'
 import { publicInfo } from '../models/User.js'
 export async function listTopicsController(req, res) {
-  const { page = 1, limit = 10 } = req.query
-  const topics = await listTopics({}, { page, limit }).lean()
+  const { page = 1, limit = 10, query = '', category = 'all', status = 'all' } = req.query
+  const pageNumber = Math.max(1, Number.parseInt(String(page), 10) || 1)
+  const limitNumber = Math.max(1, Number.parseInt(String(limit), 10) || 10)
+  const visibleStatusFilter = {
+    $or: [{ status: 'Đang mở' }, { status: 'Đã hoàn thành' }],
+  }
+  const filter = {
+    ...visibleStatusFilter,
+  }
+
+  if (typeof category === 'string' && category !== 'all') {
+    filter.category = category
+  }
+
+  if (typeof query === 'string' && query.trim()) {
+    const escapedQuery = query.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const queryRegex = new RegExp(escapedQuery, 'i')
+    filter.$and = [
+      {
+        $or: [
+          { title: queryRegex },
+          { description: queryRegex },
+          { category: queryRegex },
+          { tags: queryRegex },
+        ],
+      },
+    ]
+  }
+
+  if (typeof status === 'string' && status !== 'all') {
+    if (status === 'Đang mở' || status === 'Đã hoàn thành') {
+      filter.status = status
+    } else {
+      filter.status = '__no_results__'
+    }
+  }
+
+  const topics = await listTopics(filter, { page: pageNumber, limit: limitNumber }).lean()
+  const totalItems = await Topic.countDocuments(filter)
+  const totalPages = Math.max(1, Math.ceil(totalItems / limitNumber))
   // Chuyển trường reactions.like, reactions.dislike, submission, participation thành các trường ảo likeCount, dislikeCount, liked (-1 cho disliked, 0 cho không reaction, 1 cho liked), submissionCount, participationCount, hasParticipated (boolean)
   const transformed = topics.map(async topic => {
     const likeCount = topic.reactions?.like?.length || 0
@@ -33,7 +71,15 @@ export async function listTopicsController(req, res) {
       mySubmission,
     }
   })
-  res.json(await Promise.all(transformed))
+  res.json({
+    items: await Promise.all(transformed),
+    pagination: {
+      page: pageNumber,
+      limit: limitNumber,
+      totalItems,
+      totalPages,
+    },
+  })
 }
 
 export async function createTopic(req, res) {

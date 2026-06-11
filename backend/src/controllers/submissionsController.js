@@ -130,11 +130,13 @@ async function allowDailyPeek(userId, userRank, topicId) {
 }
 
 function canPeekAnytime(userRank) {
-  return typeof userRank === 'number' && userRank >= 600
+  // Từ rank Học giả (>= 500 điểm) được xem trộm không giới hạn.
+  return typeof userRank === 'number' && userRank >= 500
 }
 
 function canDailyPeek(userRank) {
-  return typeof userRank === 'number' && userRank >= 300 && userRank <= 500
+  // Từ rank Sinh viên kỳ cựu (>= 300) đến dưới Học giả được xem trộm 1 lần/ngày.
+  return typeof userRank === 'number' && userRank >= 300 && userRank < 500
 }
 
 async function normalizeSubmission(submission, admin = false) {
@@ -430,7 +432,10 @@ export async function peekSubmissions(req, res, next) {
       return res.status(404).json({ error: 'Không tìm thấy người dùng.' })
     }
 
-    const peekPermission = await allowDailyPeek(userId, user.rank, topicId)
+    const peekPermission = canPeekAnytime(user.rank)
+      ? { allowed: true }
+      : await allowDailyPeek(userId, user.rank, topicId)
+
     if (!peekPermission.allowed) {
       return res.status(403).json({ error: 'Bạn đã sử dụng quyền xem lén hôm nay. Vui lòng hoàn thành bài nộp để có thể xem các bài nộp khác.' })
     }

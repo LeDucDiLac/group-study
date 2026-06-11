@@ -21,9 +21,9 @@ export function FileUploadBox({
   const displayState = uploading ? 'ready' : state
 
   const copy = {
-    ready: ['Kéo thả tài liệu vào đây', 'Hỗ trợ PDF, ảnh, Markdown, text và DOCX. Tối đa 10 file, 20MB/file.'],
+    ready: ['Kéo thả tài liệu vào đây', 'Hỗ trợ ảnh, PDF, Word/Excel/PPT, text, file nén và media. Tối đa 10 file, 20MB/file.'],
     dragging: ['Thả file để thêm vào bài nộp', 'File sẽ được kiểm tra dung lượng trước khi gửi.'],
-    error: ['File không hợp lệ', 'Mỗi file tối đa 20MB và chỉ hỗ trợ PDF, ảnh, Markdown, text hoặc DOCX.'],
+    error: ['File không hợp lệ', 'Mỗi file tối đa 20MB và chỉ hỗ trợ các định dạng tài liệu phổ biến.'],
     limit: ['Đã đạt giới hạn 10 file', 'Xóa bớt file nếu muốn tải lên thêm.'],
   }[displayState]
 
@@ -57,7 +57,7 @@ export function FileUploadBox({
         type="file"
         multiple
         disabled={disabled || uploading}
-        accept=".pdf,.png,.jpg,.jpeg,.webp,.md,.txt,.docx,application/pdf,image/png,image/jpeg,image/webp,text/markdown,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        accept=".pdf,.doc,.docx,.rtf,.odt,.xls,.xlsx,.xlsm,.ods,.csv,.tsv,.ppt,.pptx,.pptm,.odp,.md,.markdown,.txt,.json,.xml,.yaml,.yml,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff,.svg,.heic,.heif,.avif,.zip,.rar,.7z,.tar,.gz,.bz2,.mp3,.wav,.m4a,.mp4,.mov,.avi,.mkv,.webm,application/pdf,application/msword,application/vnd.ms-excel,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation,image/*,text/plain,text/markdown,text/csv"
         onChange={handleChange}
       />
       <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-white text-secondary-container">

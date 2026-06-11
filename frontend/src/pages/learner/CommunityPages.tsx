@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useLocation, useParams } from 'react-router-dom'
 import { BadgeProgressCard, ContributionBadge } from '@/components/badge/ContributionBadge'
 import { SubmissionCard } from '@/components/submission/SubmissionCard'
 import { UserLink } from '@/components/user/UserLink'
@@ -42,18 +42,34 @@ const fallbackProfileStats: ProfileStats = {
 
 export function PeerLearningPage() {
   const { id = 't1' } = useParams()
+  const location = useLocation()
   const [sortBy, setSortBy] = useState('engagement')
   const { data: topic, loading: checkingAccess } = useAsync(() => topicService.getTopicById(id), topicFallback(id), [id])
   const mySubmission = topic.mySubmission
   const { data: currentUser } = useAsync(() => authService.getSessionUser(), null)
-  const { data: submissions, loading } = useAsync(() => submissionService.getSubmissionsByTopic(id), [], [id])
-  const { data: bookmarks, setData: setBookmarks } = useAsync(() => bookmarkService.getBookmarks(), [])
 
   // Chủ topic được phép xem dạy chéo mà không cần nộp bài
   const creatorId = typeof topic.createdBy === 'object' ? (topic.createdBy as any)._id : topic.createdBy
   const isOwner = !!currentUser && !!creatorId && currentUser.id === String(creatorId)
+  const peekMode = new URLSearchParams(location.search).get('peek') === '1'
 
-  const accessDenied = !checkingAccess && !mySubmission && !isOwner
+  const { data: submissions, loading } = useAsync(
+    async () => {
+      if (!id) return []
+      if (mySubmission || isOwner) {
+        return submissionService.getSubmissionsByTopic(id)
+      }
+      if (peekMode) {
+        return submissionService.peekSubmissions(id)
+      }
+      return []
+    },
+    [],
+    [id, mySubmission?._id, isOwner, peekMode],
+  )
+  const { data: bookmarks, setData: setBookmarks } = useAsync(() => bookmarkService.getBookmarks(), [])
+
+  const accessDenied = !checkingAccess && !mySubmission && !isOwner && !peekMode
 
   const sortedSubmissions = [...submissions].sort((a, b) => {
     if (sortBy === 'newest') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -85,9 +101,35 @@ export function PeerLearningPage() {
 
   return (
     <div className="mx-auto max-w-[1160px]">
-      <PeerPageHeader topic={topic} />
+      <PeerPageHeader topic={topic} mySubmission={mySubmission} />
+      {peekMode && !mySubmission && (
+        <Card className="mt-5 border-amber bg-amber-light p-4">
+          <p className="text-sm font-semibold text-amber-900">Bạn đang ở chế độ xem trộm bài nộp.</p>
+        </Card>
+      )}
       <SortBar count={submissions.length} sortBy={sortBy} onSortChange={setSortBy} />
-      {mySubmission && <MySubmissionBlock submission={mySubmission} />}
+      {mySubmission && (
+        <div className="mt-5">
+          <div className="mb-3 flex items-center gap-2">
+            <span className="text-sm font-extrabold text-primary-container">Bài của bạn</span>
+            {mySubmission.status === 'Chưa duyệt' && <Badge tone="warning">Chờ duyệt</Badge>}
+            {mySubmission.status === 'Đã duyệt' && <Badge tone="success">Đã duyệt</Badge>}
+          </div>
+          {mySubmission.status === 'Chưa duyệt' && (
+            <div className="mb-3 flex items-start gap-2 rounded-md border border-amber bg-amber-light/50 px-3 py-2.5 text-sm font-semibold text-amber-900">
+              <Icon name="clock" size={15} className="mt-0.5 shrink-0" />
+              Bài nộp của bạn đang chờ admin duyệt trước khi hiển thị cho cộng đồng.
+            </div>
+          )}
+          <PeerSubmissionCard
+            submission={mySubmission}
+            author={(mySubmission.user ?? currentUser ?? fallbackProfileUser) as User}
+            to={`/topics/${id}/peer/${mySubmission._id}`}
+            saved={bookmarkService.isBookmarked(bookmarks, mySubmission._id)}
+            onToggleBookmark={() => handleToggleSubmissionBookmark(mySubmission._id)}
+          />
+        </div>
+      )}
       <div className="mt-5 grid gap-4">
         {loading ? (
           <>
@@ -118,65 +160,9 @@ export function PeerLearningPage() {
   )
 }
 
-function MySubmissionBlock({ submission }: { submission: Submission }) {
-  const isPending = submission.status === 'Chưa duyệt'
-  return (
-    <div className="mt-5">
-      <div className="mb-3 flex items-center gap-2">
-        <span className="text-sm font-extrabold text-primary-container">Bài của bạn</span>
-        {isPending && (
-          <Badge tone="warning">Chờ duyệt</Badge>
-        )}
-        {submission.status === 'Đã duyệt' && (
-          <Badge tone="success">Đã duyệt</Badge>
-        )}
-      </div>
-      <Card className={`p-5 ${isPending ? 'border-amber bg-amber-light/30' : 'border-emerald-container'}`}>
-        {isPending && (
-          <div className="mb-4 flex items-start gap-2 rounded-md border border-amber bg-amber-light/50 px-3 py-2.5 text-sm font-semibold text-amber-900">
-            <Icon name="clock" size={15} className="mt-0.5 shrink-0" />
-            Bài nộp của bạn đang chờ admin duyệt trước khi hiển thị cho cộng đồng.
-          </div>
-        )}
-        <div className="grid gap-3">
-          <SubmissionContentBlock tone="understood" title="Đã hiểu" icon="check" content={submission.understood} />
-          <SubmissionContentBlock tone="unclear" title="Chưa hiểu" icon="message" content={submission.notUnderstood} />
-          {submission.resources.length > 0 && (
-            <section className="rounded-md bg-surface-low p-5">
-              <h2 className="text-lg font-extrabold text-primary-container">File đính kèm</h2>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {submission.resources.map((file) => (
-                  <div
-                    key={file.label}
-                    className="cursor-pointer rounded border border-border-subtle bg-white px-3 py-1.5 text-sm font-semibold text-ink-subtle hover:bg-surface-low"
-                    onClick={() => {
-                      if (!file.url) return
-                      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001'
-                      if (file.type === 'link') {
-                        window.open(file.url, '_blank')
-                      } else {
-                        window.open(baseUrl + file.url, '_blank')
-                      }
-                    }}
-                  >
-                    {file.label}
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-        </div>
-        <div className="mt-4 flex items-center justify-between gap-4 border-t border-border-subtle pt-4 text-sm font-semibold text-ink-subtle">
-          <span className="inline-flex items-center gap-1.5">
-          </span>
-          <Badge tone="neutral">{submission.isAnonymous ? 'Ẩn danh' : 'Công khai'}</Badge>
-        </div>
-      </Card>
-    </div>
-  )
-}
 
-function PeerPageHeader({ topic }: { topic: Topic }) {
+
+function PeerPageHeader({ topic, mySubmission }: { topic: Topic; mySubmission: Submission | null }) {
   return (
     <div className="rounded-md border border-border-subtle bg-white p-6 shadow-card">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -213,7 +199,7 @@ function PeerPageHeader({ topic }: { topic: Topic }) {
             </div>
           )}
         </div>
-        <Badge tone="success">Đã nộp bài</Badge>
+        {mySubmission && <Badge tone="success">Đã nộp bài</Badge>}
       </div>
     </div>
   )

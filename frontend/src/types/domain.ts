@@ -154,4 +154,18 @@ export interface TopicFilters {
   query?: string
   category?: string
   status?: TopicStatus | 'all'
+  page?: number
+  limit?: number
+}
+
+export interface TopicPagination {
+  page: number
+  limit: number
+  totalItems: number
+  totalPages: number
+}
+
+export interface TopicListResponse {
+  items: Topic[]
+  pagination: TopicPagination
 }
