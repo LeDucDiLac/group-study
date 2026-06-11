@@ -4,6 +4,7 @@ import User, { publicInfo } from '../models/User.js'
 import { addPointsForSubmissionApproved, addPointsForTopicSubmission } from '../services/rankService.js'
 import { addSubmissionToSummary } from '../services/profileService.js'
 import { createSystemNotification } from '../services/notificationService.js'
+import { addRecentActivity } from '../services/recentActivityService.js'
 
 function isValidResources(resources) {
   if (!Array.isArray(resources)) {
@@ -302,6 +303,11 @@ export async function createSubmission(req, res, next) {
       await addPointsForTopicSubmission({ topicOwnerId: topic.createdBy, actorId: userId })
       await addSubmissionToSummary(userId, topicId, createdSubmission._id)
     }
+
+    await addRecentActivity(userId, {
+      title: `Nộp bài cho chủ đề: ${topic.title}`,
+      target: { topicId: topicId.toString(), submissionId: (createdSubmission?._id || submission._id).toString() },
+    })
 
     return res.status(201).json(createdSubmission || submission)
   } catch (error) {

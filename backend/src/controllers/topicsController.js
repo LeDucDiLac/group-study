@@ -2,6 +2,7 @@ import mongoose, { deleteModel } from 'mongoose'
 import { addPointsForTopicApproved } from '../services/rankService.js'
 import Topic, { listTopics } from '../models/Topic.js'
 import { createSystemNotification } from '../services/notificationService.js'
+import { addRecentActivity } from '../services/recentActivityService.js'
 import { publicInfo } from '../models/User.js'
 export async function listTopicsController(req, res) {
   const { page = 1, limit = 10, query = '', category = 'all', status = 'all' } = req.query
@@ -110,6 +111,10 @@ export async function createTopic(req, res) {
 
   try {
     const savedTopic = await newTopic.save()
+    await addRecentActivity(req.user._id, {
+      title: `Tạo chủ đề: ${savedTopic.title}`,
+      target: { topicId: savedTopic._id },
+    })
     res.status(201).json(savedTopic)
   } catch (err) {
     res.status(500).json({ error: 'Lỗi server' })
@@ -333,6 +338,10 @@ export async function participateTopic(req, res) {
     }
     topic.Participation.push({ userId, startedAt: Date.now() })
     await topic.save()
+    await addRecentActivity(req.user._id, {
+      title: `Tham gia chủ đề: ${topic.title}`,
+      target: { topicId: topic._id },
+    })
     const entry = topic.Participation.find(p => String(p.userId) === userId)
     return res.json({ ok: true, startedAt: entry?.startedAt ?? null })
   } catch (error) {

@@ -11,7 +11,6 @@ export function PublicLayout() {
             TimeBoxed
           </Link>
           <nav className="flex items-center gap-2">
-            <ActionLink to="/topics/public" variant="ghost">Xem chủ đề</ActionLink>
             <Link to="/login"><Button>Đăng nhập</Button></Link>
           </nav>
         </div>

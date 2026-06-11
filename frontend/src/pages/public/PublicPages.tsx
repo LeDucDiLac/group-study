@@ -27,10 +27,6 @@ export function LandingPage() {
               <Icon name="arrowRight" size={17} />
               Bắt đầu học
             </ActionLink>
-            <ActionLink to="/topics/public">
-              <Icon name="book" size={17} />
-              Xem chủ đề public
-            </ActionLink>
           </div>
         </div>
 

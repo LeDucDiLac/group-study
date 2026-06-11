@@ -617,7 +617,7 @@ export function CreateTopicPage() {
   const [title, setTitle] = useState(editingTopic?.title ?? '')
   const [description, setDescription] = useState(editingTopic?.description ?? '')
   const [category, setCategory] = useState(editingTopic?.category ?? 'Khác')
-  const [durationHours, setDurationHours] = useState(editingTopic ? String(editingTopic.windowHours) : '')
+  const [durationHours, setDurationHours] = useState(editingTopic ? String(editingTopic.windowHours ?? '') : '')
   const [tags, setTags] = useState(editingTopic?.tags ?? [])
   const [tagDraft, setTagDraft] = useState('')
   const [linkLabel, setLinkLabel] = useState('')
@@ -630,7 +630,7 @@ export function CreateTopicPage() {
     setTitle(editingTopic.title)
     setDescription(editingTopic.description)
     setCategory(editingTopic.category || 'Khác')
-    setDurationHours(String(editingTopic.windowHours || 48))
+    setDurationHours(String(editingTopic.windowHours ?? ''))
     setTags(editingTopic.tags ?? [])
     setLinkLabel('')
     setLinkUrl('')
@@ -679,7 +679,8 @@ export function CreateTopicPage() {
     { label: 'Mô tả rõ ràng', done: Boolean(description.trim()) },
     { label: 'Tối đa 5 tags', done: tags.length > 0 && tags.length <= 5 },
     { label: 'Tài liệu hợp lệ', done: uploadedResources.length > 0 || (!!linkUrl.trim() && /^https?:\/\/\S+$/i.test(linkUrl.trim())) },
-    { label: 'Thời lượng học', done: Number(durationHours) >= 24 && Number(durationHours) <= 168 },
+    { label: 'Thời lượng học', done: Number(durationHours) > 0 && Number(durationHours) <= 168 },
+    { label: 'Lý do đề xuất', done: Boolean(reason.trim()) },
   ]
   const completedCount = checklist.filter((item) => item.done).length
 
@@ -690,7 +691,7 @@ export function CreateTopicPage() {
     if (!title.trim()) nextErrors.title = 'Vui lòng nhập tên chủ đề.'
     if (!description.trim()) nextErrors.description = 'Vui lòng mô tả mục tiêu học của chủ đề.'
     if (tags.length > 5) nextErrors.tags = 'Tối đa 5 tags.'
-    if (!durationHours || Number(durationHours) < 24 || Number(durationHours) > 168) nextErrors.duration = 'Thời lượng học phải từ 24 đến 168 giờ.'
+    if (!durationHours || Number(durationHours) <= 0 || Number(durationHours) > 168) nextErrors.duration = 'Thời lượng học phải lớn hơn 0 và không vượt quá 168 giờ.'
 
     const finalResources = [...uploadedResources]
     if (linkUrl.trim()) {
@@ -840,7 +841,7 @@ export function CreateTopicPage() {
                 <div className="relative">
                   <input
                     type="number"
-                    min={24}
+                    min={1}
                     max={168}
                     value={durationHours}
                     onChange={(event) => setDurationHours(event.target.value)}
@@ -848,7 +849,7 @@ export function CreateTopicPage() {
                       'h-11 w-full rounded-md border border-border bg-surface-low px-3 pr-14 text-sm font-normal outline-none transition focus:border-secondary-container focus:bg-white focus:ring-2 focus:ring-secondary-container/15',
                       errors.duration && 'border-error',
                     )}
-                    placeholder="48"
+                    placeholder="Tối đa 168 giờ (7 ngày)"
                   />
                   <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-bold text-ink-subtle">
                     giờ
@@ -1104,7 +1105,7 @@ export function TopicPendingPage() {
           ))}
         </div>
         <div className="mt-6 flex gap-3">
-          <ActionLink to="/topics">Quay lại danh sách</ActionLink>
+          <ActionLink to="/topics/new">Tạo chủ đề mới</ActionLink>
           <ActionLink to="/notifications" variant="primary">
             Xem thông báo
           </ActionLink>

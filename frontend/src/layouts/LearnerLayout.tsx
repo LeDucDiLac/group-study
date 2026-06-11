@@ -67,7 +67,7 @@ export function LearnerLayout() {
 
           <div className="relative flex items-center gap-3">
             <Badge tone={user.role === 'admin' ? 'brand' : 'success'} className="hidden sm:inline-flex">
-              {user.role === 'admin' ? 'Admin' : 'Người học'}
+              {badgeLabel}
             </Badge>
             <Link
               to="/profile"
@@ -141,7 +141,7 @@ export function LearnerLayout() {
             <div className="min-w-0 flex-1 text-left">
               <p className="truncate text-sm font-bold text-ink">{user.displayName}</p>
               <p className="truncate text-xs font-semibold text-secondary-container">
-                {user.role === 'admin' ? 'Admin' : 'Người học'} / {badgeLabel}
+                {badgeLabel}
               </p>
             </div>
           </Link>

@@ -320,10 +320,19 @@ export function PageHeader({ eyebrow, title, description, action }: { eyebrow?: 
 }
 
 export function ActionLink({ to, children, variant = 'secondary' }: { to: string; children: ReactNode; variant?: 'primary' | 'secondary' | 'ghost' }) {
+  const location = window.location
+  
+  const handleClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (location.pathname === to) {
+      event.preventDefault()
+      location.reload()
+    }
+  }
+
   const variants = {
     primary: 'bg-secondary-container text-white hover:bg-secondary',
     secondary: 'border border-border bg-white text-ink hover:border-secondary-container hover:bg-surface-low',
     ghost: 'text-ink-muted hover:bg-surface-low hover:text-ink',
   }
-  return <Link to={to} className={cn('inline-flex h-10 min-w-[88px] items-center justify-center rounded-md px-4 text-sm font-semibold transition whitespace-nowrap', variants[variant])}>{children}</Link>
+  return <Link to={to} onClick={handleClick} className={cn('inline-flex h-10 min-w-[88px] items-center justify-center rounded-md px-4 text-sm font-semibold transition whitespace-nowrap', variants[variant])}>{children}</Link>
 }
