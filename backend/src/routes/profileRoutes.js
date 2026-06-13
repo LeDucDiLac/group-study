@@ -4,14 +4,18 @@ import { getProfile, updateProfile, updateAvatar } from '../controllers/profileC
 import multer from 'multer'
 import fs from 'fs'
 import path from 'path'
+import { fileURLToPath } from 'url'
 import jwt from 'jsonwebtoken'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret'
 const COOKIE_NAME = 'tb_token'
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const avatarsDir = path.resolve(__dirname, '../../uploads/avatars')
 
 const router = Router()
 const upload = multer({ 
-    dest: 'uploads/avatars/temp/', // Thư mục tạm để lưu trữ ảnh trước khi xử lý
+    dest: path.join(avatarsDir, 'temp'), // Thư mục tạm để lưu trữ ảnh trước khi xử lý
     limits: { fileSize: 5 * 1024 * 1024 }, // Giới hạn kích thước file là 5MB
     fileFilter: (req, file, cb) => {
         // Chỉ chấp nhận các định dạng ảnh phổ biến
@@ -45,19 +49,20 @@ router.get('/:userId', optionalAuth, getProfile)
 router.put('/:userId', authMiddleware, updateProfile)
 router.get('/:userId/avatar', async (req, res) => {
     const userId = String(req.params.userId)
-    // Tìm trong thư mục avatar nếu có file nào có tên bắt đầu bằng userId thì trả về file đó
-    const avatarDir = path.join(process.cwd(), 'uploads/avatars/')
-    fs.readdir(avatarDir, (err, files) => {
+    if (!fs.existsSync(avatarsDir)) {
+        return res.status(404).json({ error: 'Không tìm thấy ảnh đại diện' })
+    }
+
+    fs.readdir(avatarsDir, (err, files) => {
         if (err) {
             return res.status(500).json({ error: 'Lỗi server' })
         }
         const avatarFile = files.find(file => file.startsWith(userId + '.'))
-        if (avatarFile) {
-            res.sendFile(path.join(avatarDir, avatarFile))
+        if (!avatarFile) {
+            return res.status(404).json({ error: 'Không tìm thấy ảnh đại diện' })
         }
-        else {
-            res.status(404).json({ error: 'Không tìm thấy ảnh đại diện' })
-        }
+
+        return res.sendFile(path.join(avatarsDir, avatarFile))
     })
 })
 router.post('/:userId/avatar', authMiddleware, upload.single('avatar'), updateAvatar)

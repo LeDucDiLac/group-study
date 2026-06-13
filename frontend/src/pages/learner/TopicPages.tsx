@@ -19,6 +19,8 @@ import type { Topic, TopicStatus, ResourceFile, TopicListResponse } from '@/type
 import { cn, formatDate } from '@/utils/format'
 import { useAsync } from '@/utils/hooks'
 
+const PINNED_TOPIC_ID = '6a2a9c91b7416a0b7d3b8115'
+
 export function TopicsPage() {
   const PAGE_SIZE = 12
   const TOPICS_FALLBACK: TopicListResponse = {
@@ -40,6 +42,11 @@ export function TopicsPage() {
 
   const topics = useMemo(() => {
     return [...allTopics].sort((a, b) => {
+      const isPinnedA = String(a._id) === PINNED_TOPIC_ID
+      const isPinnedB = String(b._id) === PINNED_TOPIC_ID
+      if (isPinnedA && !isPinnedB) return -1
+      if (!isPinnedA && isPinnedB) return 1
+
       if (sort === 'popular') return b.likeCount - a.likeCount
       if (sort === 'deadline') return a.windowHours - b.windowHours
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()

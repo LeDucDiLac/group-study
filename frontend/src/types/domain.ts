@@ -4,6 +4,7 @@ export type NotificationType = 'comment' | 'deadline' | 'approved' | 'rejected' 
 
 export interface User {
   id: string
+  name?: string
   displayName: string
   email: string
   role: UserRole

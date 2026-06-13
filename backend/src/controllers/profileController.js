@@ -3,6 +3,11 @@ import ProfileService, {fetchTopicsParticipated, fetchTopicsCreated} from '../se
 import { getRecentActivities } from '../services/recentActivityService.js'
 import fs from 'fs'
 import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const avatarDir = path.resolve(__dirname, '../../uploads/avatars')
 
 export async function getProfile(req, res) {
     const paramId = req.params.userId
@@ -75,7 +80,6 @@ export async function updateAvatar(req, res) {
     if (!req.file) return res.status(400).json({ error: 'Không tải lên được ảnh' })
 
     // Chuyển ảnh từ thư mục tạm sang thư mục chính, ghi đè nếu đã có ảnh cũ
-    const avatarDir = path.join(process.cwd(), 'uploads/avatars/')
     const finalPath = path.join(avatarDir, `${userId}${path.extname(req.file.originalname)}`)
     
     // Kiểm tra và tạo thư mục nếu chưa tồn tại
@@ -83,6 +87,12 @@ export async function updateAvatar(req, res) {
         fs.mkdirSync(avatarDir, { recursive: true })
     }
 
+    // Kiểm tra nếu đã có ảnh đại diện cũ, xóa nó đi
+    const existingAvatar = fs.readdirSync(avatarDir).find(file => file.startsWith(userId + '.'))
+    if (existingAvatar) {
+        fs.unlinkSync(path.join(avatarDir, existingAvatar))
+    }
+    
     // Di chuyển ảnh từ thư mục tạm sang thư mục chính
     fs.renameSync(path.join(avatarDir, `temp`, req.file.filename), finalPath)
 

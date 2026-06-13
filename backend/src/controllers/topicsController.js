@@ -4,6 +4,9 @@ import Topic, { listTopics } from '../models/Topic.js'
 import { createSystemNotification } from '../services/notificationService.js'
 import { addRecentActivity } from '../services/recentActivityService.js'
 import { publicInfo } from '../models/User.js'
+
+const PINNED_TOPIC_ID = '6a2a9c91b7416a0b7d3b8115'
+
 export async function listTopicsController(req, res) {
   const { page = 1, limit = 10, query = '', category = 'all', status = 'all' } = req.query
   const pageNumber = Math.max(1, Number.parseInt(String(page), 10) || 1)
@@ -42,7 +45,28 @@ export async function listTopicsController(req, res) {
     }
   }
 
-  const topics = await listTopics(filter, { page: pageNumber, limit: limitNumber }).lean()
+  const shouldPinTopic = pageNumber === 1
+    && (!String(query).trim())
+    && (category == null || category === 'all' || !String(category).trim())
+
+  let topics
+  if (shouldPinTopic) {
+    const pinnedTopic = await Topic.findOne({ ...filter, _id: PINNED_TOPIC_ID })
+      .select('-proposalReason -rejectionReason, -approvedBy -approvedAt')
+      .populate('createdBy', 'displayName rank')
+      .lean()
+
+    const remainingLimit = pinnedTopic ? Math.max(0, limitNumber - 1) : limitNumber
+    const remainingTopics = await listTopics(
+      pinnedTopic ? { ...filter, _id: { $ne: PINNED_TOPIC_ID } } : filter,
+      { page: 1, limit: remainingLimit },
+    ).lean()
+
+    topics = pinnedTopic ? [pinnedTopic, ...remainingTopics] : remainingTopics
+  } else {
+    topics = await listTopics(filter, { page: pageNumber, limit: limitNumber }).lean()
+  }
+
   const totalItems = await Topic.countDocuments(filter)
   const totalPages = Math.max(1, Math.ceil(totalItems / limitNumber))
   // Chuyển trường reactions.like, reactions.dislike, submission, participation thành các trường ảo likeCount, dislikeCount, liked (-1 cho disliked, 0 cho không reaction, 1 cho liked), submissionCount, participationCount, hasParticipated (boolean)

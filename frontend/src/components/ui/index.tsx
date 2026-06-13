@@ -1,4 +1,4 @@
-import { useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from 'react'
+import { useEffect, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from 'react'
 import { Link } from 'react-router-dom'
 import { cn } from '@/utils/format'
 import { useAvatarCache } from '@/contexts/AvatarCacheContext'
@@ -138,12 +138,6 @@ export function Badge({ children, tone = 'neutral', className = '' }: { children
 export function Avatar({ name, anonymous = false, size = 'md', userId }: { name?: string; anonymous?: boolean; size?: 'sm' | 'md' | 'lg'; userId?: string }) {
   const { version } = useAvatarCache()
   const [imgFailed, setImgFailed] = useState(false)
-  // Reset lỗi mỗi khi version thay đổi (sau khi upload ảnh mới)
-  const [lastVersion, setLastVersion] = useState(version)
-  if (version !== lastVersion) {
-    setLastVersion(version)
-    setImgFailed(false)
-  }
 
   const initials = anonymous ? '?' : (name ?? '').split(' ').filter(Boolean).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || '?'
   const sizes = { sm: 'h-8 w-8 text-xs', md: 'h-10 w-10 text-sm', lg: 'h-14 w-14 text-base' }
@@ -151,6 +145,10 @@ export function Avatar({ name, anonymous = false, size = 'md', userId }: { name?
   const backendUrl = import.meta.env.VITE_API_URL || ''
   const baseUrlClean = backendUrl.endsWith('/') ? backendUrl.slice(0, -1) : backendUrl
   const avatarUrl = userId && !anonymous ? `${baseUrlClean}/api/profiles/${userId}/avatar?v=${version}` : null
+
+  useEffect(() => {
+    setImgFailed(false)
+  }, [avatarUrl])
 
   if (avatarUrl && !imgFailed) {
     return (

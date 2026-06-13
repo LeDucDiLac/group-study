@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { Avatar, Badge, Button, Icon } from '@/components/ui'
 import { authService } from '@/services/api'
 import type { User } from '@/types/domain'
-import { RANK_LABELS } from '@/utils/badges'
+import { RANK_LABELS, getRankTier } from '@/utils/badges'
 import { cn } from '@/utils/format'
 import { useAsync } from '@/utils/hooks'
 
@@ -27,7 +27,7 @@ const fallbackLearner: User = {
 export function LearnerLayout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const { data: user } = useAsync(() => authService.getSessionUser().then(u => u ?? fallbackLearner), fallbackLearner)
-  const badgeLabel = user.role === 'admin' ? 'Admin' : RANK_LABELS[Math.floor(user.rank / 100)]
+  const badgeLabel = user.role === 'admin' ? 'Admin' : RANK_LABELS[getRankTier(user.rank)]
   const navigate = useNavigate()
 
   const handleLogout = async () => {
@@ -40,11 +40,13 @@ export function LearnerLayout() {
       <header className="sticky top-0 z-40 border-b border-border-subtle bg-white/95 backdrop-blur">
         <div className="mx-auto flex h-[72px] max-w-[1360px] items-center justify-between px-6">
           <Link to="/topics" className="flex items-center gap-3">
-            <span className="flex h-11 w-11 items-center justify-center rounded-md bg-secondary-container text-white shadow-[0_10px_24px_rgba(207,58,50,0.22)]">
-              <Icon name="clock" size={22} />
-            </span>
+            <img
+              src="/BCO.6d6b4df6-d95c-4ea7-bd31-1516d9022f26.png"
+              alt="BCO"
+              className="h-11 w-11 rounded-md object-cover shadow-[0_10px_24px_rgba(207,58,50,0.22)]"
+            />
             <span>
-              <span className="block text-lg font-extrabold leading-none text-primary-container">TimeBoxed</span>
+              <span className="block text-lg font-extrabold leading-none text-primary-container">TimeBoxed Peer Learning</span>
               <span className="mt-1 hidden text-xs font-semibold text-ink-subtle sm:block">Học bằng cách dạy</span>
             </span>
           </Link>
@@ -111,10 +113,12 @@ export function LearnerLayout() {
       >
         <div className="mb-8 flex items-center justify-between">
           <Link to="/topics" className="flex items-center gap-3 font-extrabold text-primary-container" onClick={() => setMobileMenuOpen(false)}>
-            <span className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary-container text-white">
-              <Icon name="clock" />
-            </span>
-            TimeBoxed
+            <img
+              src="/BCO.6d6b4df6-d95c-4ea7-bd31-1516d9022f26.png"
+              alt="BCO"
+              className="h-12 w-12 rounded-md object-cover"
+            />
+            TimeBoxed Peer Learning
           </Link>
           <button onClick={() => setMobileMenuOpen(false)} className="flex h-9 w-9 items-center justify-center rounded-md text-ink-muted hover:bg-surface-low" aria-label="Đóng">
             <Icon name="close" />

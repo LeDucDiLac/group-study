@@ -15,7 +15,6 @@ const nav = [
 
 const fallbackAdmin: User = {
   id: 'loading-admin',
-  name: 'Admin',
   displayName: 'Admin',
   email: '',
   role: 'admin',
@@ -55,11 +54,13 @@ export function AdminLayout() {
       >
         <div className="flex items-center justify-between border-b border-border-subtle px-5 py-5">
           <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-md bg-secondary-container text-white">
-              <Icon name="shield" />
-            </span>
+            <img
+              src="/BCO.6d6b4df6-d95c-4ea7-bd31-1516d9022f26.png"
+              alt="BCO"
+              className="h-10 w-10 rounded-md object-cover"
+            />
             <div>
-              <p className="font-extrabold leading-none text-primary-container">TimeBoxed</p>
+              <p className="font-extrabold leading-none text-primary-container">TimeBoxed Peer Learning</p>
               <p className="mt-1 text-xs font-semibold text-ink-subtle">Admin Panel</p>
             </div>
           </div>
@@ -93,7 +94,7 @@ export function AdminLayout() {
           <div className="flex items-center gap-3">
             <Avatar name={admin.displayName} size="sm" />
             <div className="min-w-0">
-              <p className="truncate text-sm font-bold text-ink">{admin.name}</p>
+              <p className="truncate text-sm font-bold text-ink">{admin.displayName}</p>
               <p className="truncate text-xs text-ink-subtle">{admin.email || 'admin'}</p>
             </div>
           </div>

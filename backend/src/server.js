@@ -4,6 +4,8 @@ import morgan from 'morgan'
 import dotenv from 'dotenv'
 import cookieParser from 'cookie-parser'
 import mongoose from 'mongoose'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import healthRoutes from './routes/healthRoutes.js'
 import authRoutes from './routes/authRoutes.js'
 import topicsRoutes from './routes/topicsRoutes.js'
@@ -16,6 +18,10 @@ import profileRoutes from './routes/profileRoutes.js'
 import notificationRoute from './routes/notificationRoute.js'
 
 dotenv.config()
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const uploadsDir = path.resolve(__dirname, '../uploads')
 
 const app = express()
 
@@ -55,7 +61,7 @@ app.use('/api/reactions', reactionRoutes)
 app.use('/api/upload', uploadRoutes)
 app.use('/api/profiles', profileRoutes)
 app.use('/api/notifications', notificationRoute)
-app.use('/uploads', express.static('uploads'))
+app.use('/uploads', express.static(uploadsDir))
 
 // Fallback
 app.use((req, res) => {

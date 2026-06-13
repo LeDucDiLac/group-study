@@ -109,11 +109,13 @@ function AdminAccessDenied({ user }: { user: User }) {
       <header className="relative z-10 border-b border-border-subtle/80 bg-white/80 backdrop-blur">
         <div className="mx-auto flex h-20 max-w-[1180px] items-center justify-between gap-4 px-6">
           <Link to="/topics" className="flex items-center gap-3">
-            <span className="flex h-12 w-12 items-center justify-center rounded-md bg-secondary-container text-white shadow-[0_10px_24px_rgba(207,58,50,0.24)]">
-              <Icon name="clock" size={22} />
-            </span>
+            <img
+              src="/BCO.6d6b4df6-d95c-4ea7-bd31-1516d9022f26.png"
+              alt="BCO"
+              className="h-12 w-12 rounded-md object-cover shadow-[0_10px_24px_rgba(207,58,50,0.24)]"
+            />
             <span>
-              <span className="block text-lg font-extrabold leading-none text-primary-container">TimeBoxed</span>
+              <span className="block text-lg font-extrabold leading-none text-primary-container">TimeBoxed Peer Learning</span>
               <span className="mt-1 block text-xs font-semibold text-ink-subtle">Admin access</span>
             </span>
           </Link>
